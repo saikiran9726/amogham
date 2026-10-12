@@ -1,5 +1,5 @@
 # Multi-stage Dockerfile for @restaurant-os/api
-FROM node:20-alpine AS base
+FROM node:26-alpine AS base
 RUN corepack enable && corepack prepare pnpm@12.4.2 --activate
 WORKDIR /app
 
@@ -22,7 +22,7 @@ RUN cp -r /app/apps/api/dist /app/deployed/dist && \
     cp -r /app/apps/api/src/db/migrations/* /app/deployed/dist/db/migrations/
 
 # Stage 3: Production runner
-FROM node:20-alpine AS runner
+FROM node:26-alpine AS runner
 ENV NODE_ENV=production
 WORKDIR /app
 
