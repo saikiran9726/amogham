@@ -14,7 +14,7 @@ RUN pnpm --filter=@restaurant-os/shared build
 RUN pnpm --filter=@restaurant-os/web build
 
 # Stage 2: Production Nginx Server
-FROM nginx:1.27-alpine AS runner
+FROM nginx:1.31-alpine AS runner
 
 # Copy custom hardened Nginx configuration
 COPY apps/web/nginx.conf /etc/nginx/conf.d/default.conf
