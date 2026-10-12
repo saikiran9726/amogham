@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<network-security-config>
+    <!--
+      Restaurant OS Network Security Policy.
+      Cleartext traffic (HTTP / raw TCP) is strictly restricted to local RFC1918 private subnets
+      and local mDNS (.local) hosts for LAN thermal ESC/POS printers.
+    -->
+    <base-config cleartextTrafficPermitted="false">
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
+
+    <!-- RFC1918 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16 and localhost -->
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="true">10.in-addr.arpa</domain>
+        <domain includeSubdomains="true">168.192.in-addr.arpa</domain>
+        <domain includeSubdomains="true">local</domain>
+        <domain includeSubdomains="true">localhost</domain>
+        <domain includeSubdomains="false">127.0.0.1</domain>
+    </domain-config>
+</network-security-config>

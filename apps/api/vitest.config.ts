@@ -1,0 +1,25 @@
+import { defineConfig } from 'vitest/config';
+
+export default defineConfig({
+  test: {
+    globals: true,
+    environment: 'node',
+    coverage: {
+      provider: 'v8',
+      reporter: ['text', 'json', 'html'],
+      include: ['src/**'],
+      exclude: ['src/**/*.test.ts', 'dist/**'],
+      thresholds: {
+        'src/routes/bills/**': {
+          lines: 85,
+        },
+        'src/services/sync*/**': {
+          lines: 85,
+        },
+        'src/auth/**': {
+          lines: 85,
+        },
+      },
+    },
+  },
+});
