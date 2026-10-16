@@ -14,7 +14,7 @@ RUN pnpm --filter=@restaurant-os/shared build
 RUN pnpm --filter=@restaurant-os/web build
 
 # Stage 2: Production Nginx Server
-FROM nginx:1.27-alpine AS runner
+FROM nginx:1.29-alpine AS runner
 
 # Configure unprivileged execution with cap_net_bind_service so nginx user can bind to port 80
 RUN apk add --no-cache libcap && \
