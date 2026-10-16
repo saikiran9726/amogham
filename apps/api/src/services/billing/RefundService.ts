@@ -9,7 +9,11 @@ import { tables } from '../../db/schema/tables.js';
 import { paymentRequests } from '../../db/schema/payment-requests.js';
 import { recordAuditLog } from '../audit.js';
 import { emitRealtimeEvent } from '../../realtime/socket.js';
-import { verifyApproverPin } from '../../auth/approval.js';
+import {
+  authorizeApprover,
+  recordApprovalUse,
+  type ApproverVerificationResult,
+} from '../../auth/approval.js';
 import { processBillReversalLoyalty } from '../loyalty.js';
 import { assertBusinessDateNotLocked } from './PaymentService.js';
 
@@ -44,7 +48,33 @@ export class RefundService {
    * Cancels an unpaid bill or cancels a paid bill with owner authorization.
    */
   static async cancelBill(params: CancelBillParams, executor: DbOrTx = db) {
-    const { restaurantId, billId, userId, roleName, reason, approverUserId, pin, overridePin, request } = params;
+    const {
+      restaurantId,
+      billId,
+      userId,
+      roleName,
+      reason,
+      approverUserId,
+      pin,
+      overridePin,
+      request,
+    } = params;
+
+    const effectivePin = pin ?? overridePin;
+    let preAuthorizedApprover: ApproverVerificationResult | null = null;
+    if (approverUserId && effectivePin) {
+      preAuthorizedApprover = await authorizeApprover(db, {
+        restaurantId,
+        approverUserId,
+        pin: effectivePin,
+        allowedRoles: [Roles.OWNER, Roles.MANAGER],
+        reason,
+        entity: 'bill',
+        entityId: billId,
+        actorUserId: userId,
+        request,
+      });
+    }
 
     const result = await executor.transaction(async (tx) => {
       const billRows = await tx
@@ -65,21 +95,31 @@ export class RefundService {
 
       // If bill was already paid, requires OWNER role or approver PIN override
       if (bill.status === 'paid' && roleName !== Roles.OWNER) {
-        const effectivePin = pin ?? overridePin;
         if (!approverUserId || !effectivePin) {
           throw AppError.forbidden(
             'Cancelling a paid bill requires Owner authorization or approver PIN override',
           );
         }
-        await verifyApproverPin(tx, {
+        const approver =
+          preAuthorizedApprover ??
+          (await authorizeApprover(db, {
+            restaurantId,
+            approverUserId,
+            pin: effectivePin,
+            allowedRoles: [Roles.OWNER, Roles.MANAGER],
+            reason,
+            entity: 'bill',
+            entityId: bill.id,
+            actorUserId: userId,
+            request,
+          }));
+        await recordApprovalUse(tx, {
           restaurantId,
-          approverUserId,
-          pin: effectivePin,
-          allowedRoles: [Roles.OWNER, Roles.MANAGER],
-          reason,
+          approver,
           entity: 'bill',
           entityId: bill.id,
           actorUserId: userId,
+          reason,
           request,
         });
       }
@@ -111,9 +151,7 @@ export class RefundService {
         .set({ status: 'saved', updatedAt: new Date() })
         .where(eq(orders.id, bill.orderId));
 
-      const order = (
-        await tx.select().from(orders).where(eq(orders.id, bill.orderId)).limit(1)
-      )[0];
+      const order = (await tx.select().from(orders).where(eq(orders.id, bill.orderId)).limit(1))[0];
 
       if (order?.tableId) {
         await tx
@@ -158,7 +196,35 @@ export class RefundService {
    * Records a refund on a paid or partially paid bill.
    */
   static async refundBill(params: RefundBillParams, executor: DbOrTx = db) {
-    const { restaurantId, billId, userId, amountPaise, method, reason, paymentId, approverUserId, pin, overridePin, request } = params;
+    const {
+      restaurantId,
+      billId,
+      userId,
+      amountPaise,
+      method,
+      reason,
+      paymentId,
+      approverUserId,
+      pin,
+      overridePin,
+      request,
+    } = params;
+
+    const effectivePin = pin ?? overridePin;
+    let preAuthorizedApprover: ApproverVerificationResult | null = null;
+    if (approverUserId && effectivePin) {
+      preAuthorizedApprover = await authorizeApprover(db, {
+        restaurantId,
+        approverUserId,
+        pin: effectivePin,
+        allowedRoles: [Roles.OWNER, Roles.MANAGER],
+        reason,
+        entity: 'bill',
+        entityId: billId,
+        actorUserId: userId,
+        request,
+      });
+    }
 
     const result = await executor.transaction(async (tx) => {
       const billRows = await tx
@@ -193,17 +259,27 @@ export class RefundService {
         );
       }
 
-      const effectivePin = pin ?? overridePin;
       if (approverUserId && effectivePin) {
-        await verifyApproverPin(tx, {
+        const approver =
+          preAuthorizedApprover ??
+          (await authorizeApprover(db, {
+            restaurantId,
+            approverUserId,
+            pin: effectivePin,
+            allowedRoles: [Roles.OWNER, Roles.MANAGER],
+            reason,
+            entity: 'bill',
+            entityId: billId,
+            actorUserId: userId,
+            request,
+          }));
+        await recordApprovalUse(tx, {
           restaurantId,
-          approverUserId,
-          pin: effectivePin,
-          allowedRoles: [Roles.OWNER, Roles.MANAGER],
-          reason,
+          approver,
           entity: 'bill',
           entityId: billId,
           actorUserId: userId,
+          reason,
           request,
         });
       }

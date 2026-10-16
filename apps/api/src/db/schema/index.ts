@@ -23,3 +23,4 @@ export * from './expenses.js';
 export * from './health.js';
 export * from './alerts-insights.js';
 export * from './sync.js';
+export * from './login-throttle.js';

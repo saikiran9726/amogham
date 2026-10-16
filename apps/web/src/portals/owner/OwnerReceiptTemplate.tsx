@@ -4,6 +4,7 @@ import { ReceiptPreview } from '../../components/ReceiptPreview.js';
 import { isValidUpiVpa, type ReceiptData, type RestaurantSettings } from '@restaurant-os/shared';
 import { ArrowLeft, Save, CheckCircle2, AlertTriangle, QrCode, Sliders } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { useAuthStore } from '../../stores/useAuthStore.js';
 
 export const OwnerReceiptTemplate: React.FC = () => {
   const navigate = useNavigate();
@@ -26,7 +27,7 @@ export const OwnerReceiptTemplate: React.FC = () => {
 
   useEffect(() => {
     const fetchSettings = async () => {
-      const token = localStorage.getItem('access_token') || '';
+      const token = useAuthStore.getState().accessToken || '';
       const res = await fetch('/api/settings', {
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -59,7 +60,7 @@ export const OwnerReceiptTemplate: React.FC = () => {
     setIsSaving(true);
     setSaveStatus(null);
     try {
-      const token = localStorage.getItem('access_token') || '';
+      const token = useAuthStore.getState().accessToken || '';
       const payload = {
         ...settings,
         upiVpa: upiVpa.trim() || null,

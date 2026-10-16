@@ -1,5 +1,6 @@
 import Fastify, { FastifyInstance } from 'fastify';
 import fastifyCookie from '@fastify/cookie';
+import fastifyUnderPressure from '@fastify/under-pressure';
 import { generateUuidV7 } from '@restaurant-os/shared';
 import { env } from './config/env.js';
 import { registerCors } from './plugins/cors.js';
@@ -60,11 +61,18 @@ export function parseTrustProxy(
   return val.trim();
 }
 
-export async function buildServer(): Promise<FastifyInstance> {
+export async function buildServer(options?: {
+  logger?: boolean | object;
+}): Promise<FastifyInstance> {
   const isDev = env.NODE_ENV === 'development';
   const isTest = env.NODE_ENV === 'test';
 
   const app = Fastify({
+    connectionTimeout: 10_000,
+    keepAliveTimeout: 5_000,
+    maxRequestsPerSocket: 1000,
+    requestTimeout: 30_000,
+    bodyLimit: 1_048_576, // 1MB request body limit
     genReqId: (req) => {
       const header = req.headers['x-request-id'];
       if (typeof header === 'string' && header.length <= 64 && /^[A-Za-z0-9_-]+$/.test(header)) {
@@ -73,38 +81,41 @@ export async function buildServer(): Promise<FastifyInstance> {
       return generateUuidV7();
     },
     requestIdHeader: 'x-request-id',
-    logger: isTest
-      ? false
-      : {
-          level: env.LOG_LEVEL,
-          redact: {
-            paths: [
-              'req.headers.authorization',
-              'req.headers.cookie',
-              'headers.authorization',
-              'headers.cookie',
-              'authorization',
-              'cookie',
-              '*.password',
-              '*.pin',
-              '*.managerPin',
-              '*.overridePin',
-              '*.ownerPin',
-              '*.approverPin',
-            ],
-            censor: '[REDACTED]',
-          },
-          transport: isDev
-            ? {
-                target: 'pino-pretty',
-                options: {
-                  translateTime: 'HH:MM:ss Z',
-                  ignore: 'pid,hostname',
-                  colorize: true,
-                },
-              }
-            : undefined,
-        },
+    logger:
+      options?.logger !== undefined
+        ? options.logger
+        : isTest
+          ? false
+          : {
+              level: env.LOG_LEVEL,
+              redact: {
+                paths: [
+                  'req.headers.authorization',
+                  'req.headers.cookie',
+                  'headers.authorization',
+                  'headers.cookie',
+                  'authorization',
+                  'cookie',
+                  '*.password',
+                  '*.pin',
+                  '*.managerPin',
+                  '*.overridePin',
+                  '*.ownerPin',
+                  '*.approverPin',
+                ],
+                censor: '[REDACTED]',
+              },
+              transport: isDev
+                ? {
+                    target: 'pino-pretty',
+                    options: {
+                      translateTime: 'HH:MM:ss Z',
+                      ignore: 'pid,hostname',
+                      colorize: true,
+                    },
+                  }
+                : undefined,
+            },
     trustProxy: parseTrustProxy(env.TRUST_PROXY),
   });
 
@@ -133,6 +144,21 @@ export async function buildServer(): Promise<FastifyInstance> {
   await registerHelmet(app);
   await registerRateLimit(app);
 
+  // Under-pressure backpressure protection (load shedding)
+  await app.register(fastifyUnderPressure, {
+    maxEventLoopDelay: 1000,
+    maxHeapUsedBytes: 1024 * 1024 * 1024,
+    maxRssBytes: 1.5 * 1024 * 1024 * 1024,
+    maxEventLoopUtilization: 0.98,
+    retryAfter: 10,
+    pressureHandler: (_req, reply, _type, _value) => {
+      reply.status(503).header('Retry-After', '10').send({
+        status: 'error',
+        error: 'Service Unavailable: Server under extreme pressure, please retry shortly',
+      });
+    },
+  });
+
   // Cookie Support
   await app.register(fastifyCookie, {
     secret: env.COOKIE_SECRET,
@@ -146,7 +172,7 @@ export async function buildServer(): Promise<FastifyInstance> {
     const durationSeconds = reply.elapsedTime / 1000;
     MetricsService.recordHttpDuration(
       request.method,
-      request.routeOptions?.url || request.url,
+      request.routeOptions?.url ?? 'unmatched',
       reply.statusCode,
       durationSeconds,
     );

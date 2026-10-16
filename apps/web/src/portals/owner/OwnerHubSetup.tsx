@@ -18,9 +18,13 @@ import {
 } from 'lucide-react';
 import type { SyncStatusOverview, HubRegistryItem } from '@restaurant-os/shared';
 
+import { validateHubAddress } from '../../config/api-base.js';
+import { useSocketFallbackPollInterval } from '../../utils/polling.js';
+
 export const OwnerHubSetup: React.FC = () => {
   const queryClient = useQueryClient();
   const { addToast } = useToastStore();
+  const fallbackPollInterval = useSocketFallbackPollInterval();
   const {
     hubAddress,
     setHubAddress,
@@ -38,25 +42,31 @@ export const OwnerHubSetup: React.FC = () => {
   const { data: statusRes, isLoading } = useQuery<{ success: boolean; data: SyncStatusOverview }>({
     queryKey: ['sync-status'],
     queryFn: () => apiFetch('/sync/status'),
-    refetchInterval: 10000,
+    refetchInterval: fallbackPollInterval,
   });
 
   const overview = statusRes?.data;
 
   const registerHubMutation = useMutation({
-    mutationFn: () =>
-      apiFetch('/sync/hub/register', {
+    mutationFn: () => {
+      const check = validateHubAddress(inputAddress);
+      if (!check.valid) {
+        throw new Error(check.error || 'Invalid hub address');
+      }
+      return apiFetch('/sync/hub/register', {
         method: 'POST',
         body: JSON.stringify({
           deviceId: `hub-${Date.now().toString(36)}`,
           name: hubName,
-          hostAddress: inputAddress,
+          hostAddress: check.normalizedUrl || inputAddress,
           apiKey: hubApiKey,
         }),
-      }),
+      });
+    },
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['sync-status'] });
-      setHubAddress(inputAddress);
+      const check = validateHubAddress(inputAddress);
+      setHubAddress(check.normalizedUrl || inputAddress);
       addToast({ message: 'Local Hub registered and configured', type: 'success' });
     },
     onError: (err: unknown) => {
@@ -68,7 +78,12 @@ export const OwnerHubSetup: React.FC = () => {
   });
 
   const handleTestConnection = async () => {
-    setHubAddress(inputAddress);
+    const check = validateHubAddress(inputAddress);
+    if (!check.valid) {
+      addToast({ message: check.error || 'Invalid hub address', type: 'danger' });
+      return;
+    }
+    setHubAddress(check.normalizedUrl || inputAddress);
     const conn = await probeConnection();
     if (conn === 'hub') {
       addToast({ message: 'Local Hub reachable on local network!', type: 'success' });

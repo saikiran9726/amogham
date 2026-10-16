@@ -12,8 +12,9 @@ import { IdempotencyCleanupService } from '../src/jobs/cleanup.js';
 const expectedDatabase = process.env.RESTAURANT_OS_ISOLATED_TEST_DB;
 const isDedicatedTestDatabase =
   Boolean(expectedDatabase) &&
-  (new URL(process.env.DATABASE_URL || 'postgres://localhost/').pathname === `/${expectedDatabase}` ||
-   process.env.DATABASE_URL?.includes(expectedDatabase));
+  (new URL(process.env.DATABASE_URL || 'postgres://localhost/').pathname ===
+    `/${expectedDatabase}` ||
+    process.env.DATABASE_URL?.includes(expectedDatabase));
 
 describe.skipIf(!isDedicatedTestDatabase)('Idempotency hardening integration tests', () => {
   const restaurantA = randomUUID();

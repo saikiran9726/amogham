@@ -70,13 +70,5 @@ export async function getUserSession(
     return session;
   }
 
-  // In test environment, if synthetic test token is used (user not in DB), default to active session
-  if (process.env.NODE_ENV === 'test' || process.env.VITEST) {
-    return {
-      tokenVersion: 0,
-      active: true,
-    };
-  }
-
   return null;
 }

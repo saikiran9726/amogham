@@ -219,20 +219,19 @@ export const OwnerMenu: React.FC = () => {
     const headerRow = ['category', 'name', 'veg/non-veg', 'price', 'aliases', 'modifier groups']
       .map(escapeCsvCell)
       .join(',');
-    const rows = items
-      .map((item) => {
-        const cat = categories.find((c) => c.id === item.categoryId)?.name || '';
-        const price = (item.pricePaise / 100).toFixed(2);
-        const aliases = (item.aliases || []).join(';');
-        return [
-          escapeCsvCell(cat),
-          escapeCsvCell(item.name),
-          escapeCsvCell(item.isVeg ? 'veg' : 'non-veg'),
-          escapeCsvCell(price),
-          escapeCsvCell(aliases),
-          escapeCsvCell(''),
-        ].join(',');
-      });
+    const rows = items.map((item) => {
+      const cat = categories.find((c) => c.id === item.categoryId)?.name || '';
+      const price = (item.pricePaise / 100).toFixed(2);
+      const aliases = (item.aliases || []).join(';');
+      return [
+        escapeCsvCell(cat),
+        escapeCsvCell(item.name),
+        escapeCsvCell(item.isVeg ? 'veg' : 'non-veg'),
+        escapeCsvCell(price),
+        escapeCsvCell(aliases),
+        escapeCsvCell(''),
+      ].join(',');
+    });
 
     const csvContent = [headerRow, ...rows].join('\r\n');
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });

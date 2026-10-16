@@ -15,7 +15,7 @@ describe('CSV Formula Injection Prevention', () => {
   });
 
   it('neutralizes formula injection characters (=, +, -, @, \\t, \\r)', () => {
-    expect(escapeCsvCell('=cmd|\' /C calc\'!A0')).toBe('"\'=cmd|\' /C calc\'!A0"');
+    expect(escapeCsvCell("=cmd|' /C calc'!A0")).toBe("\"'=cmd|' /C calc'!A0\"");
     expect(escapeCsvCell('+1+1')).toBe('"\'+1+1"');
     expect(escapeCsvCell('-SUM(A1:A10)')).toBe('"\' -SUM(A1:A10)"'.replace(' ', ''));
     expect(escapeCsvCell('@SUM(A1:A10)')).toBe('"\'@SUM(A1:A10)"');
@@ -24,7 +24,7 @@ describe('CSV Formula Injection Prevention', () => {
   });
 
   it('sanitizes unquoted raw values with sanitizeCsvValue', () => {
-    expect(sanitizeCsvValue('=1+1')).toBe('\'=1+1');
+    expect(sanitizeCsvValue('=1+1')).toBe("'=1+1");
     expect(sanitizeCsvValue('normal text')).toBe('normal text');
     expect(sanitizeCsvValue(null)).toBe('');
   });

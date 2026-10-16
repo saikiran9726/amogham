@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { apiFetch } from '../../stores/useAuthStore.js';
 import { useToastStore } from '../../stores/useToastStore.js';
+import { useSocketFallbackPollInterval } from '../../utils/polling.js';
 import { Button } from '../../components/ui/Button.js';
 import { PurchaseLineEditor, type PurchaseLineDraft } from '../../components/PurchaseLineEditor.js';
 import { Dialog } from '../../components/ui/Overlay.js';
@@ -58,12 +59,13 @@ export const OwnerPurchases: React.FC = () => {
   const [newSupplierNotes, setNewSupplierNotes] = useState('');
 
   // Queries
+  const fallbackPollInterval = useSocketFallbackPollInterval();
   const { data: purchasesData, isLoading: isPurchasesLoading } = useQuery<{
     purchases: PurchaseOutput[];
   }>({
     queryKey: ['inventory-purchases'],
     queryFn: () => apiFetch('/inventory/purchases?limit=50'),
-    refetchInterval: 15000,
+    refetchInterval: fallbackPollInterval,
   });
 
   const { data: itemsData } = useQuery<{ items: InventoryItemOutput[] }>({

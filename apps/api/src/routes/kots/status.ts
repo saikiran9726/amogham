@@ -1,10 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import { eq, and, sql } from 'drizzle-orm';
-import {
-  Permissions,
-  AppError,
-  updateKotStatusSchema,
-} from '@restaurant-os/shared';
+import { Permissions, AppError, updateKotStatusSchema } from '@restaurant-os/shared';
 import { forTenant } from '../../db/tenant.js';
 import { orders } from '../../db/schema/orders.js';
 import { kots, kotItems } from '../../db/schema/kots.js';

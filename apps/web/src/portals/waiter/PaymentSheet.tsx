@@ -13,20 +13,14 @@ import {
   Permissions,
 } from '@restaurant-os/shared';
 import { PinOverrideDialog, type PinOverrideData } from '../../components/PinOverrideDialog.js';
-import {
-  CheckCircle2,
-  ArrowLeft,
-  Sparkles,
-  QrCode,
-  CreditCard,
-  Printer,
-} from 'lucide-react';
+import { CheckCircle2, ArrowLeft, Sparkles, QrCode, CreditCard, Printer } from 'lucide-react';
 import { DynamicUpiQr } from '../../components/DynamicUpiQr.js';
 import { printerService } from '../../services/printer/printer-service.js';
 import { PointsBadge } from '../../components/PointsBadge.js';
 import { TierBadge } from '../../components/TierBadge.js';
 import { RedeemStepper } from '../../components/RedeemStepper.js';
 import { clearPaymentAttemptKey, getPaymentAttemptKey } from './paymentAttempt.js';
+import { useSocketFallbackPollInterval } from '../../utils/polling.js';
 
 export interface BillPaymentData {
   id: string;
@@ -84,6 +78,7 @@ export const PaymentSheet: React.FC<PaymentSheetProps> = ({
   }, []);
 
   // Fetch latest bill payments
+  const fallbackPollInterval = useSocketFallbackPollInterval();
   const { data, refetch } = useQuery<{
     bill: BillPaymentData;
     order?: { customerId?: string | null };
@@ -93,7 +88,7 @@ export const PaymentSheet: React.FC<PaymentSheetProps> = ({
     queryKey: ['bill-payments', bill?.id],
     queryFn: () => apiFetch(`/bills/${bill?.id}`),
     enabled: Boolean(isOpen && bill?.id),
-    refetchInterval: 3000,
+    refetchInterval: fallbackPollInterval,
   });
 
   const currentBill = data?.bill || bill;
@@ -175,20 +170,17 @@ export const PaymentSheet: React.FC<PaymentSheetProps> = ({
 
     try {
       const idempotencyKey = getPaymentAttemptKey(currentBill.id);
-      const res = await apiFetch<{ isFullyPaid?: boolean }>(
-        `/bills/${currentBill.id}/payments`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            method: line.method,
-            amountPaise: line.amountPaise,
-            tenderedPaise: line.tenderedPaise,
-            reference: line.reference,
-            idempotencyKey,
-          }),
-        },
-      );
+      const res = await apiFetch<{ isFullyPaid?: boolean }>(`/bills/${currentBill.id}/payments`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          method: line.method,
+          amountPaise: line.amountPaise,
+          tenderedPaise: line.tenderedPaise,
+          reference: line.reference,
+          idempotencyKey,
+        }),
+      });
       // A successful response (including an idempotent replay) completes this logical attempt.
       clearPaymentAttemptKey(currentBill.id);
 

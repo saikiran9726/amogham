@@ -13,7 +13,8 @@ vi.mock('../../stores/useCartStore.js', () => ({
   useCartStore: (selector: (state: { items: unknown[] }) => unknown) => selector({ items: [] }),
 }));
 vi.mock('../../stores/useOutboxStore.js', () => ({
-  useOutboxStore: (selector: (state: { pendingCount: number }) => unknown) => selector({ pendingCount: 0 }),
+  useOutboxStore: (selector: (state: { pendingCount: number }) => unknown) =>
+    selector({ pendingCount: 0 }),
 }));
 vi.mock('virtual:pwa-register/react', () => ({
   useRegisterSW: () => ({

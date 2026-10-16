@@ -73,6 +73,7 @@ export interface HubRegistryItem {
   lastSyncedSeq: number;
   createdAt: string;
   updatedAt: string;
+  apiKey?: string;
 }
 
 export interface DeadLetterCommandItem {

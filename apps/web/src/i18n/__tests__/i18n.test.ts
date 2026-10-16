@@ -1,5 +1,12 @@
 import { describe, it, expect } from 'vitest';
-import { t, setLocale, getLocale, translations, type Locale, type TranslationKey } from '../index.js';
+import {
+  t,
+  setLocale,
+  getLocale,
+  translations,
+  type Locale,
+  type TranslationKey,
+} from '../index.js';
 
 describe('i18n Localization Engine', () => {
   it('translates default english keys accurately', () => {

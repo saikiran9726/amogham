@@ -51,6 +51,9 @@ export const Permissions = {
   STAFF_MANAGE: 'staff.manage',
   SETTINGS_MANAGE: 'settings.manage',
   AUDIT_READ: 'audit.read',
+
+  // Offline & Edge Synchronization
+  SYNC_USE: 'sync.use',
 } as const;
 
 export type Permission = (typeof Permissions)[keyof typeof Permissions];
@@ -85,6 +88,7 @@ export const ROLE_DEFAULT_PERMISSIONS: Record<RoleName, readonly Permission[]> =
     Permissions.BILL_READ,
     Permissions.PAYMENT_TAKE,
     Permissions.CUSTOMER_READ,
+    Permissions.SYNC_USE,
   ],
 
   KITCHEN: [
@@ -122,6 +126,7 @@ export const ROLE_DEFAULT_PERMISSIONS: Record<RoleName, readonly Permission[]> =
     Permissions.DAY_CLOSE,
     Permissions.STAFF_MANAGE,
     Permissions.AUDIT_READ,
+    Permissions.SYNC_USE,
   ],
 
   CASHIER: [
@@ -135,5 +140,6 @@ export const ROLE_DEFAULT_PERMISSIONS: Record<RoleName, readonly Permission[]> =
     Permissions.DISCOUNT_APPLY,
     Permissions.REPORT_READ,
     Permissions.CUSTOMER_READ,
+    Permissions.SYNC_USE,
   ],
 };

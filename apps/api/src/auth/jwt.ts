@@ -42,11 +42,12 @@ export function signAccessToken(
 }
 
 /**
- * Verifies and decodes an access token with HS256 algorithm and issuer/audience verification.
+ * Verifies and decodes an access token with HS256 algorithm and strict issuer/audience verification.
+ * Supports zero-downtime key rotation via JWT_SECRET_PREVIOUS.
  */
 export function verifyAccessToken(token: string): DecodedAccessToken {
-  try {
-    const decoded = jwt.verify(token, env.JWT_SECRET, {
+  const verifyWithSecret = (secret: string): DecodedAccessToken => {
+    const decoded = jwt.verify(token, secret, {
       algorithms: ['HS256'],
       issuer: JWT_ISSUER,
       audience: JWT_AUDIENCE,
@@ -56,16 +57,17 @@ export function verifyAccessToken(token: string): DecodedAccessToken {
       decoded.tv = 0;
     }
     return decoded;
+  };
+
+  try {
+    return verifyWithSecret(env.JWT_SECRET);
   } catch (err: unknown) {
-    const errMsg = err instanceof Error ? err.message : '';
-    if (errMsg.includes('jwt issuer') || errMsg.includes('jwt audience')) {
-      const decoded = jwt.verify(token, env.JWT_SECRET, {
-        algorithms: ['HS256'],
-      }) as DecodedAccessToken;
-      if (typeof decoded.tv !== 'number') {
-        decoded.tv = 0;
+    if (env.JWT_SECRET_PREVIOUS) {
+      try {
+        return verifyWithSecret(env.JWT_SECRET_PREVIOUS);
+      } catch {
+        throw err;
       }
-      return decoded;
     }
     throw err;
   }

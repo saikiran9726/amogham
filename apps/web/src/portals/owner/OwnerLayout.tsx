@@ -23,6 +23,7 @@ import {
   Sparkles,
   LayoutGrid,
 } from 'lucide-react';
+import { useSocketFallbackPollInterval } from '../../utils/polling.js';
 import { useQuery } from '@tanstack/react-query';
 import { apiFetchData } from '../../api/response.js';
 import { isAlertList, ownerAlertQueryKey } from './dataContracts.js';
@@ -78,6 +79,7 @@ export const OwnerLayout: React.FC = () => {
     (item) => !item.permission || user?.permissions.includes(item.permission),
   );
 
+  const fallbackPollInterval = useSocketFallbackPollInterval();
   const {
     data: alertData,
     isLoading: isAlertsLoading,
@@ -85,7 +87,7 @@ export const OwnerLayout: React.FC = () => {
   } = useQuery({
     queryKey: ownerAlertQueryKey(),
     queryFn: () => apiFetchData('/alerts?status=open', isAlertList),
-    refetchInterval: 15000,
+    refetchInterval: fallbackPollInterval,
   });
 
   const alerts = isAlertList(alertData) ? alertData : undefined;

@@ -6,6 +6,20 @@ import { useKitchenStore } from './useKitchenStore.js';
 import { localDb } from '../db/dexie.js';
 import { useConnectionStore } from './useConnectionStore.js';
 import { Roles } from '@restaurant-os/shared';
+import type { QueryClient } from '@tanstack/react-query';
+
+let activeQueryClient: QueryClient | null = null;
+
+export function registerSocketQueryClient(client: QueryClient | null): void {
+  activeQueryClient = client;
+}
+
+export function invalidateSocketQueries(queryKeys: (string | unknown)[][]): void {
+  if (!activeQueryClient) return;
+  for (const key of queryKeys) {
+    void activeQueryClient.invalidateQueries({ queryKey: key });
+  }
+}
 
 interface SocketState {
   socket: Socket | null;
@@ -126,44 +140,60 @@ export const useSocketStore = create<SocketState>((set, get) => ({
       }
     });
 
-    // Realtime events
-    s.on('kot.created', (payload: { timestamp?: number; data: unknown }) => {
-      set({ lastEventTimestamp: payload.timestamp || Date.now() });
-      handleIncomingRealtimeEvent('kot.created', payload.data);
-    });
+    // Realtime events subscription
+    const forwardEvent = (eventName: string) => {
+      s.on(eventName, (payload?: { timestamp?: number; data?: unknown } | unknown) => {
+        const timestamp =
+          payload && typeof payload === 'object' && 'timestamp' in payload
+            ? (payload as { timestamp?: number }).timestamp
+            : Date.now();
+        const data =
+          payload && typeof payload === 'object' && 'data' in payload
+            ? (payload as { data?: unknown }).data
+            : payload;
 
-    s.on('kot.updated', (payload: { timestamp?: number; data: unknown }) => {
-      set({ lastEventTimestamp: payload.timestamp || Date.now() });
-      handleIncomingRealtimeEvent('kot.updated', payload.data);
-    });
+        if (eventName === 'kot.statusChanged') {
+          set((state) => ({
+            lastEventTimestamp: timestamp || Date.now(),
+            kotStatusEventVersion: state.kotStatusEventVersion + 1,
+          }));
+        } else {
+          set({ lastEventTimestamp: timestamp || Date.now() });
+        }
 
-    s.on('kot.itemDone', (payload: { timestamp?: number; data: unknown }) => {
-      set({ lastEventTimestamp: payload.timestamp || Date.now() });
-      handleIncomingRealtimeEvent('kot.itemDone', payload.data);
-    });
+        handleIncomingRealtimeEvent(eventName, data);
+      });
+    };
 
-    s.on('kot.statusChanged', (payload: { timestamp?: number; data: unknown }) => {
-      set((state) => ({
-        lastEventTimestamp: payload.timestamp || Date.now(),
-        kotStatusEventVersion: state.kotStatusEventVersion + 1,
-      }));
-      handleIncomingRealtimeEvent('kot.statusChanged', payload.data);
-    });
-
-    s.on('order.ready', (payload: { timestamp?: number; data: unknown }) => {
-      set({ lastEventTimestamp: payload.timestamp || Date.now() });
-      handleIncomingRealtimeEvent('order.ready', payload.data);
-    });
-
-    s.on('table.statusChanged', (payload: { timestamp?: number; data: unknown }) => {
-      set({ lastEventTimestamp: payload.timestamp || Date.now() });
-      handleIncomingRealtimeEvent('table.statusChanged', payload.data);
-    });
-
-    s.on('menu.availabilityChanged', (payload: { timestamp?: number; data: unknown }) => {
-      set({ lastEventTimestamp: payload.timestamp || Date.now() });
-      handleIncomingRealtimeEvent('menu.availabilityChanged', payload.data);
-    });
+    [
+      'kot.created',
+      'kot.updated',
+      'kot.itemDone',
+      'kot.statusChanged',
+      'order.ready',
+      'table.statusChanged',
+      'menu.availabilityChanged',
+      'bill.created',
+      'bill.updated',
+      'bill.paid',
+      'bill.cancelled',
+      'bill.settled',
+      'payment.confirmed',
+      'refund.processed',
+      'eod.closed',
+      'eod.reopened',
+      'sync.status',
+      'sync.event',
+      'sync.pullCompleted',
+      'sync.pushCompleted',
+      'alert:new',
+      'alert:resolved',
+      'alert:acknowledged',
+      'alert:snoozed',
+      'alert:dismissed',
+      'inventory.updated',
+      'purchase.recorded',
+    ].forEach(forwardEvent);
 
     set({ socket: s });
   },
@@ -182,6 +212,43 @@ function handleIncomingRealtimeEvent(event: string, data: unknown) {
 
   // Forward to kitchen store if active
   useKitchenStore.getState().applyRealtimeKotEvent(event, data);
+
+  // Invalidate TanStack query caches based on realtime events
+  if (event.startsWith('kot.') || event === 'order.ready' || event === 'order.created') {
+    invalidateSocketQueries([
+      ['kots'],
+      ['kots-history'],
+      ['waiter-kots'],
+      ['kitchen-kots'],
+      ['orders'],
+    ]);
+  } else if (
+    event.startsWith('bill.') ||
+    event.startsWith('payment.') ||
+    event.startsWith('refund.')
+  ) {
+    invalidateSocketQueries([
+      ['bill'],
+      ['bills'],
+      ['owner-payments'],
+      ['payments'],
+      ['eod-preview'],
+      ['sales'],
+      ['owner-sales'],
+    ]);
+  } else if (event.startsWith('table.')) {
+    invalidateSocketQueries([['tables'], ['floor-tables']]);
+  } else if (event.startsWith('menu.')) {
+    invalidateSocketQueries([['menu'], ['menu-items']]);
+  } else if (event.startsWith('eod.')) {
+    invalidateSocketQueries([['eod-preview'], ['day-status'], ['sales'], ['owner-sales']]);
+  } else if (event.startsWith('sync.')) {
+    invalidateSocketQueries([['sync-status'], ['sync-problems']]);
+  } else if (event.startsWith('alert:')) {
+    invalidateSocketQueries([['alerts'], ['owner-alerts'], ['insights'], ['pending-approvals']]);
+  } else if (event.startsWith('inventory.') || event.startsWith('purchase.')) {
+    invalidateSocketQueries([['inventory-items'], ['owner-purchases']]);
+  }
 
   switch (event) {
     case 'order.ready': {

@@ -16,6 +16,7 @@ Deploying Restaurant OS Local Hub on an in-restaurant mini-PC or edge appliance.
 ## 2. Single-Tenant Edge Hub Architecture (`MULTI_TENANT=false`)
 
 Restaurant OS defaults to single-tenant deployments (`MULTI_TENANT=false` in `apps/api/src/config/env.ts`):
+
 - **Deployment Model**: One isolated physical Edge Hub per restaurant location.
 - **Data Isolation**: Physical database isolation ensures zero cross-tenant attack vectors or data leakage.
 - **Startup Enforcement**: In production (`NODE_ENV=production`), the API server automatically validates that exactly one restaurant row exists in the database. If zero or multiple restaurants are detected, startup halts immediately to prevent misconfiguration.
@@ -26,6 +27,7 @@ Restaurant OS defaults to single-tenant deployments (`MULTI_TENANT=false` in `ap
 ## 3. Hub Mode & Machine Authentication (`HUB_ROLE=local_hub`)
 
 When deployed with `HUB_ROLE=local_hub`:
+
 - **`HubSyncWorker`**: Automatically boots on server start. Continuously streams local `sync_events` to `CLOUD_SYNC_URL/sync/hub/push` and pulls cloud configuration events via `/sync/hub/pull`.
 - **Machine Authentication (`X-Hub-Key`)**:
   - Edge-to-cloud communication authenticates strictly via the `X-Hub-Key` HTTP header.
@@ -103,6 +105,7 @@ TRUST_PROXY=127.0.0.1,::1
 ```
 
 Supported values:
+
 - `1`: Trust the immediate upstream proxy hop (inspects `X-Forwarded-For`).
 - `127.0.0.1,192.168.1.0/24`: Explicit trusted IP addresses or CIDR blocks.
 - `false`: Direct client connections only (ignores `X-Forwarded-*` headers).
@@ -114,6 +117,7 @@ Supported values:
 ### Automated Nightly Backup (`backup.sh`)
 
 The `hub-backup` container runs `backup.sh` every 24 hours:
+
 - Executes `pg_dump` with `--clean --if-exists`.
 - Streams to a temporary file, compresses with gzip (`gzip -9`).
 - Verifies archive integrity with `gzip -t`.
@@ -131,6 +135,7 @@ docker exec -it restaurant-hub-backup /docker/restore-test.sh
 ```
 
 **Runbook Steps executed by `restore-test.sh`:**
+
 1. Locates the newest backup archive in `/backups`.
 2. Verifies SHA-256 checksum against `.sha256` digest file.
 3. Tests archive integrity using `gzip -t`.
@@ -166,6 +171,7 @@ curl http://localhost:3000/readyz
 ## 7. Observability & Monitoring
 
 The Local Hub exposes Prometheus metrics on `/metrics`:
+
 - **`restaurant_os_http_request_duration_seconds`**: Request latency histogram by method, route, and status code.
 - **`restaurant_os_sync_lag_events`**: Event distance between local sequence and cloud cursor.
 - **`restaurant_os_dead_letter_count`**: Active quarantined poison commands requiring review.

@@ -191,7 +191,12 @@ export const useOutboxStore = create<OutboxState>((set, get) => ({
           await localDb.outbox.update(cmd.id, { status: 'synced' });
 
           // Update local order synced flag
-          if (cmd.payload && typeof cmd.payload === 'object' && 'id' in cmd.payload && cmd.payload.id) {
+          if (
+            cmd.payload &&
+            typeof cmd.payload === 'object' &&
+            'id' in cmd.payload &&
+            cmd.payload.id
+          ) {
             await localDb.openOrders.update(cmd.payload.id as string, { isSynced: true });
           }
         } catch (err: unknown) {

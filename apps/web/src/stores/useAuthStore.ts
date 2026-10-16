@@ -1,8 +1,7 @@
 import { create } from 'zustand';
 import type { UserProfile } from '@restaurant-os/shared';
-import { useConnectionStore } from './useConnectionStore.js';
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:4000';
+import { API_BASE_URL } from '../config/api-base.js';
 
 interface AuthState {
   user: UserProfile | null;
@@ -49,7 +48,7 @@ if (authChannel) {
 
 async function doRefreshHttp(): Promise<boolean> {
   try {
-    const res = await fetch(`${API_BASE}/auth/refresh`, {
+    const res = await fetch(`${API_BASE_URL}/auth/refresh`, {
       method: 'POST',
       credentials: 'include',
     });
@@ -154,7 +153,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   },
 
   login: async (credentials) => {
-    const res = await fetch(`${API_BASE}/auth/login`, {
+    const res = await fetch(`${API_BASE_URL}/auth/login`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -176,7 +175,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
   logout: async () => {
     try {
-      await fetch(`${API_BASE}/auth/logout`, {
+      await fetch(`${API_BASE_URL}/auth/logout`, {
         method: 'POST',
         credentials: 'include',
       });

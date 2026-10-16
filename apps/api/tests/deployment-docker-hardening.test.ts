@@ -16,6 +16,7 @@ describe('Deployment & Docker Hardening Tests', () => {
   const backupShPath = path.join(ROOT_DIR, 'docker/backup.sh');
   const restoreTestShPath = path.join(ROOT_DIR, 'docker/restore-test.sh');
   const installHubShPath = path.join(ROOT_DIR, 'docker/install-hub.sh');
+  const ciYamlPath = path.join(ROOT_DIR, '.github/workflows/ci.yml');
 
   describe('Docker Compose Hardening & Syntax', () => {
     it('validates root docker-compose.yml syntax, required secrets, 127.0.0.1 bind, and healthchecks', () => {
@@ -30,12 +31,42 @@ describe('Deployment & Docker Hardening Tests', () => {
       expect(content).toContain('JWT_SECRET: ${JWT_SECRET:?');
       expect(content).toContain('COOKIE_SECRET: ${COOKIE_SECRET:?');
 
+      // Check production environment hardening flags
+      expect(content).toContain('COOKIE_SECURE');
+      expect(content).toContain('COOKIE_SAMESITE');
+      expect(content).toContain('TRUST_PROXY');
+      expect(content).toContain('CORS_ORIGIN');
+      expect(content).toContain('METRICS_TOKEN');
+
       // Check Postgres is bound to 127.0.0.1
       const pgPorts = parsed.services.postgres.ports;
       expect(pgPorts.some((p: string) => p.startsWith('127.0.0.1:'))).toBe(true);
 
-      // Check API healthcheck against /healthz
+      // Check dedicated migrate service
+      expect(parsed.services.migrate).toBeDefined();
+      expect(parsed.services.migrate.restart).toBe('no');
+      expect(parsed.services.migrate.init).toBe(true);
+      expect(parsed.services.migrate.user).toBe('1000:1000');
+      expect(parsed.services.migrate.read_only).toBe(true);
+      expect(parsed.services.migrate.command).toEqual(['node', 'dist/db/migrate.js', 'up']);
+      expect(parsed.services.migrate.depends_on.postgres).toEqual({
+        condition: 'service_healthy',
+      });
+
+      // Check API container hardening & startup dependencies
       expect(parsed.services.api).toBeDefined();
+      expect(parsed.services.api.init).toBe(true);
+      expect(parsed.services.api.user).toBe('1000:1000');
+      expect(parsed.services.api.read_only).toBe(true);
+      expect(parsed.services.api.tmpfs).toEqual(['/tmp']);
+      expect(parsed.services.api.depends_on.postgres).toEqual({
+        condition: 'service_healthy',
+      });
+      expect(parsed.services.api.depends_on.migrate).toEqual({
+        condition: 'service_completed_successfully',
+      });
+
+      // Check API healthcheck against /healthz
       expect(parsed.services.api.healthcheck).toBeDefined();
       expect(JSON.stringify(parsed.services.api.healthcheck.test)).toContain('/healthz');
     });
@@ -80,6 +111,24 @@ describe('Deployment & Docker Hardening Tests', () => {
         condition: 'service_completed_successfully',
       });
 
+      // hub-api container hardening
+      expect(parsed.services['hub-api'].init).toBe(true);
+      expect(parsed.services['hub-api'].user).toBe('1000:1000');
+      expect(parsed.services['hub-api'].read_only).toBe(true);
+      expect(parsed.services['hub-api'].tmpfs).toEqual(['/tmp']);
+
+      // hub-migrate container hardening
+      expect(parsed.services['hub-migrate'].init).toBe(true);
+      expect(parsed.services['hub-migrate'].user).toBe('1000:1000');
+      expect(parsed.services['hub-migrate'].read_only).toBe(true);
+
+      // hub compose production env vars
+      expect(content).toContain('COOKIE_SECURE');
+      expect(content).toContain('COOKIE_SAMESITE');
+      expect(content).toContain('TRUST_PROXY');
+      expect(content).toContain('CORS_ORIGIN');
+      expect(content).toContain('METRICS_TOKEN');
+
       // hub-api healthcheck against /healthz
       expect(parsed.services['hub-api'].healthcheck).toBeDefined();
       expect(JSON.stringify(parsed.services['hub-api'].healthcheck.test)).toContain('/healthz');
@@ -106,19 +155,26 @@ describe('Deployment & Docker Hardening Tests', () => {
   });
 
   describe('Web Hosting & Nginx Security Configuration', () => {
-    it('validates apps/web/Dockerfile multi-stage nginx build with healthcheck', () => {
+    it('validates apps/web/Dockerfile multi-stage nginx build with unprivileged user and healthcheck', () => {
       const content = fs.readFileSync(webDockerfilePath, 'utf8');
 
       expect(content).toContain('FROM nginx:1.27-alpine AS runner');
       expect(content).toContain('COPY apps/web/nginx.conf /etc/nginx/conf.d/default.conf');
+      expect(content).toContain('USER nginx');
+      expect(content).toContain('setcap');
       expect(content).toContain('HEALTHCHECK');
     });
 
-    it('enforces HSTS, strict CSP without unsafe-inline scripts, and security headers in nginx.conf', () => {
+    it('enforces HSTS, strict CSP without unsafe-inline scripts, server_tokens off, and security headers in nginx.conf', () => {
       const content = fs.readFileSync(webNginxConfPath, 'utf8');
 
+      // Server tokens off
+      expect(content).toContain('server_tokens off;');
+
       // HSTS
-      expect(content).toContain('Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"');
+      expect(content).toContain(
+        'Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"',
+      );
 
       // Strict CSP: script-src 'self' without 'unsafe-inline'
       expect(content).toContain("script-src 'self'");
@@ -133,8 +189,45 @@ describe('Deployment & Docker Hardening Tests', () => {
       expect(content).toContain('Referrer-Policy "strict-origin-when-cross-origin"');
       expect(content).toContain('Permissions-Policy');
 
+      // Reverse proxy routes for API and Socket.io
+      expect(content).toContain('location /api/');
+      expect(content).toContain('proxy_pass http://api:4000/;');
+      expect(content).toContain('location /socket.io/');
+      expect(content).toContain('proxy_pass http://api:4000/socket.io/;');
+      expect(content).toContain('proxy_set_header Upgrade $http_upgrade;');
+
       // SPA fallback
       expect(content).toContain('try_files $uri $uri/ /index.html');
+    });
+  });
+
+  describe('CI/CD Pipeline Security & Quality Gates', () => {
+    it('enforces least privilege permissions, concurrency cancellation, and pinned action SHAs in ci.yml', () => {
+      const content = fs.readFileSync(ciYamlPath, 'utf8');
+      const parsed = yaml.parse(content);
+
+      // Top-level least-privilege permissions
+      expect(parsed.permissions).toEqual({
+        contents: 'read',
+      });
+
+      // Concurrency cancellation group
+      expect(parsed.concurrency).toBeDefined();
+      expect(content).toContain("cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}");
+
+      // All external actions must be pinned to full 40-character commit SHAs
+      const usesLines: string[] = content.match(/uses:\s+([^\s\n]+)/g) || [];
+      expect(usesLines.length).toBeGreaterThan(0);
+      for (const line of usesLines) {
+        const actionRef = line.replace('uses:', '').trim();
+        // Ignore local composite actions if any (./.github/...)
+        if (actionRef.startsWith('.')) continue;
+        expect(actionRef).toMatch(/@[a-f0-9]{40}/);
+      }
+
+      // Docker smoke tests validate container healthcheck
+      expect(content).toContain('docker inspect --format=');
+      expect(content).toContain('healthy');
     });
   });
 

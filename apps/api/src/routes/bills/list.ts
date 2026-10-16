@@ -1,9 +1,5 @@
 import type { FastifyInstance, FastifyRequest } from 'fastify';
-import {
-  Permissions,
-  BillFilterSchema,
-  ApplyDiscountSchema,
-} from '@restaurant-os/shared';
+import { Permissions, BillFilterSchema, ApplyDiscountSchema } from '@restaurant-os/shared';
 import { requirePermission } from '../../auth/middleware.js';
 import { BillingService } from '../../services/billing/BillingService.js';
 

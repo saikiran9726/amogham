@@ -20,9 +20,7 @@ export async function syncOrderAndTableStatus(orderId: string, restaurantId: str
   const allItems = await tx.select().from(kotItems).where(inArray(kotItems.kotId, kotIds));
 
   // Non-cancelled items
-  const activeItems = allItems.filter(
-    (i) => i.action !== 'cancel' && i.status !== 'cancelled',
-  );
+  const activeItems = allItems.filter((i) => i.action !== 'cancel' && i.status !== 'cancelled');
 
   let orderStatus: 'saved' | 'preparing' | 'ready' | 'served' = 'saved';
   let tableStatus: 'occupied' | 'preparing' | 'ready' = 'occupied';

@@ -1,7 +1,9 @@
 ## Summary of Changes
+
 <!-- Provide a concise description of what changed and why -->
 
 ## Security Checklist
+
 Please verify the following requirements before merging:
 
 - [ ] **Tenant Isolation**:

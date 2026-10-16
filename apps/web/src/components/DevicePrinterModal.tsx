@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Dialog } from './ui/Overlay.js';
 import { Button } from './ui/Button.js';
 import { printerService } from '../services/printer/printer-service.js';
+import { useAuthStore } from '../stores/useAuthStore.js';
 import type { PrinterConfig } from '@restaurant-os/shared';
 import { Printer, Check, Smartphone, Wifi, Usb, Globe } from 'lucide-react';
 
@@ -24,10 +25,12 @@ export const DevicePrinterModal: React.FC<DevicePrinterModalProps> = ({ isOpen, 
   const loadPrinters = async () => {
     setIsLoading(true);
     try {
-      const token = localStorage.getItem('access_token') || '';
-      const res = await fetch('/api/printers', {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const token = useAuthStore.getState().accessToken || '';
+      const headers: Record<string, string> = { Accept: 'application/json' };
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+      const res = await fetch('/api/printers', { headers });
       if (res.ok) {
         const list: PrinterConfig[] = await res.json();
         setPrinters(list);

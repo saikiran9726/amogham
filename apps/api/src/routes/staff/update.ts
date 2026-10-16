@@ -1,19 +1,12 @@
 import type { FastifyInstance } from 'fastify';
 import { eq, and, ne, sql } from 'drizzle-orm';
 import { invalidateUserSessionCache } from '../../auth/token-cache.js';
-import {
-  Permissions,
-  Roles,
-  AppError,
-  staffUpdateSchema,
-} from '@restaurant-os/shared';
+import { disconnectUserSockets } from '../../realtime/socket.js';
+import { Permissions, Roles, AppError, staffUpdateSchema } from '@restaurant-os/shared';
 import { forTenant } from '../../db/tenant.js';
 import { users } from '../../db/schema/users.js';
 import { roles } from '../../db/schema/roles.js';
-import {
-  canActorManageTargetRole,
-  canActorPromoteRole,
-} from '../../auth/role-hierarchy.js';
+import { canActorManageTargetRole, canActorPromoteRole } from '../../auth/role-hierarchy.js';
 import { requirePermission, registerRouteGuard } from '../../auth/middleware.js';
 import { recordAuditLog } from '../../services/audit.js';
 
@@ -155,6 +148,7 @@ export async function registerStaffUpdateRoutes(app: FastifyInstance): Promise<v
 
       if (roleChanged || activeChanged) {
         invalidateUserSessionCache(authUser.restaurantId, targetUser.id);
+        disconnectUserSockets(targetUser.id, 'User account status or role updated');
       }
 
       if (!updated) {

@@ -1,0 +1,284 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+jobs:
+  audit:
+    name: Dependency Audit & Secret Scan
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 0
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@a3252b78d470290cbf0629739fb04ab4f18d5300 # v4.0.0
+        with:
+          version: 12.4.2
+
+      - name: Setup Node.js
+        uses: actions/setup-node@1a4442cacd43658591677926273135b453febec6 # v4.2.0
+        with:
+          node-version: 22.x
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Production Audit (High & Critical)
+        run: pnpm audit --prod --audit-level=high
+
+      - name: Gitleaks Secret Scanner
+        uses: gitleaks/gitleaks-action@53a7f8582d9214777592cf1be16ea86047c32bf2 # v2.3.8
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  codeql:
+    name: CodeQL Static Analysis
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+      security-events: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@b56ba49b26e50535fa1e7f7db0f4f7b4765d80cb # v3.28.10
+        with:
+          languages: javascript-typescript
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@b56ba49b26e50535fa1e7f7db0f4f7b4765d80cb # v3.28.10
+
+  validate:
+    name: Lint, Typecheck, Test, Coverage & Build
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: restaurant_os_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@a3252b78d470290cbf0629739fb04ab4f18d5300 # v4.0.0
+        with:
+          version: 12.4.2
+
+      - name: Setup Node.js
+        uses: actions/setup-node@1a4442cacd43658591677926273135b453febec6 # v4.2.0
+        with:
+          node-version: 22.x
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Check formatting
+        run: pnpm format:check
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Run migrations for tests
+        run: pnpm db:migrate
+        env:
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/restaurant_os_test
+
+      - name: Run tests with Coverage and Zero-Skip Assertion
+        run: |
+          set -euo pipefail
+          # Execute vitest with JSON reporter and fail if any tests are skipped
+          pnpm exec vitest run --coverage --reporter=default --reporter=json --outputFile=vitest-report.json
+
+          node -e '
+            const report = require("./vitest-report.json");
+            const numFailed = report.numFailedTestSuites || 0;
+            const numPending = report.numPendingTestSuites || 0;
+            const numTotal = report.numTotalTestSuites || 0;
+            console.log(`Test suites: Total=${numTotal}, Failed=${numFailed}, Skipped/Pending=${numPending}`);
+            if (numFailed > 0) {
+              console.error(`ERROR: ${numFailed} test suites failed!`);
+              process.exit(1);
+            }
+            if (numPending > 0) {
+              console.error(`ERROR: ${numPending} test suites were skipped! Isolated test db must run all suites.`);
+              process.exit(1);
+            }
+          '
+        env:
+          RESTAURANT_OS_ISOLATED_TEST_DB: restaurant_os_test
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/restaurant_os_test
+          PORT: 4000
+          HOST: 0.0.0.0
+          NODE_ENV: test
+          LOG_LEVEL: silent
+          CORS_ORIGIN: http://localhost:5173
+
+      - name: Build packages and apps
+        run: pnpm build
+
+  docker-smoke:
+    name: Docker Build & Container Health Smoke Tests
+    runs-on: ubuntu-latest
+    needs: [validate]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Build API Docker Image
+        run: docker build -f apps/api/Dockerfile -t restaurant-os-api:test .
+
+      - name: Run API Container & Validate Healthcheck
+        run: |
+          set -euo pipefail
+          docker run -d --name api-smoke \
+            -e PORT=4000 \
+            -e HOST=0.0.0.0 \
+            -e NODE_ENV=production \
+            -e JWT_SECRET=smoke-test-jwt-secret-minimum-32-chars-long \
+            -e COOKIE_SECRET=smoke-test-cookie-secret-min-32-chars-long \
+            -e DATABASE_URL=postgres://dummy:dummy@127.0.0.1:5432/dummy \
+            -p 4000:4000 \
+            restaurant-os-api:test
+
+          echo "Waiting for API container healthcheck..."
+          HEALTHY=false
+          for i in $(seq 1 15); do
+            STATUS=$(docker inspect --format='{{json .State.Health.Status}}' api-smoke 2>/dev/null || echo '"starting"')
+            echo "Current API container health status: $STATUS"
+            if [ "$STATUS" = '"healthy"' ]; then
+              HEALTHY=true
+              break
+            fi
+            sleep 2
+          done
+
+          # Hit /healthz endpoint
+          curl --fail --retry 5 --retry-delay 2 http://127.0.0.1:4000/healthz
+
+          if [ "$HEALTHY" != "true" ]; then
+            echo "API container health check timed out or failed to reach healthy status"
+            docker inspect api-smoke
+            exit 1
+          fi
+
+          docker stop api-smoke
+          docker rm api-smoke
+
+      - name: Build Web Docker Image
+        run: docker build -f apps/web/Dockerfile -t restaurant-os-web:test .
+
+      - name: Run Web Container & Validate Healthcheck
+        run: |
+          set -euo pipefail
+          docker run -d --name web-smoke -p 80:80 restaurant-os-web:test
+
+          echo "Waiting for Web container healthcheck..."
+          HEALTHY=false
+          for i in $(seq 1 15); do
+            STATUS=$(docker inspect --format='{{json .State.Health.Status}}' web-smoke 2>/dev/null || echo '"starting"')
+            echo "Current Web container health status: $STATUS"
+            if [ "$STATUS" = '"healthy"' ]; then
+              HEALTHY=true
+              break
+            fi
+            sleep 2
+          done
+
+          curl --fail --retry 5 --retry-delay 2 http://127.0.0.1:80/
+
+          if [ "$HEALTHY" != "true" ]; then
+            echo "Web container health check timed out or failed to reach healthy status"
+            docker inspect web-smoke
+            exit 1
+          fi
+
+          docker stop web-smoke
+          docker rm web-smoke
+
+  playwright-e2e:
+    name: Playwright E2E & Axe Accessibility
+    runs-on: ubuntu-latest
+    needs: [validate]
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: restaurant_os_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@a3252b78d470290cbf0629739fb04ab4f18d5300 # v4.0.0
+        with:
+          version: 12.4.2
+
+      - name: Setup Node.js
+        uses: actions/setup-node@1a4442cacd43658591677926273135b453febec6 # v4.2.0
+        with:
+          node-version: 22.x
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Playwright browsers
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Run migrations & seed DB for E2E
+        run: |
+          pnpm db:migrate
+        env:
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/restaurant_os_test
+
+      - name: Build Web & API
+        run: pnpm build
+
+      - name: Run Playwright Tests
+        run: pnpm test:e2e
+        env:
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/restaurant_os_test
+          CI: true

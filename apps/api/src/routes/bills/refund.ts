@@ -1,9 +1,5 @@
 import type { FastifyInstance, FastifyRequest } from 'fastify';
-import {
-  Permissions,
-  CancelBillSchema,
-  RefundBillSchema,
-} from '@restaurant-os/shared';
+import { Permissions, CancelBillSchema, RefundBillSchema } from '@restaurant-os/shared';
 import { requirePermission } from '../../auth/middleware.js';
 import { RefundService } from '../../services/billing/RefundService.js';
 import { forTenant } from '../../db/tenant.js';

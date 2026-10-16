@@ -685,4 +685,67 @@ describe('Database Migrations 0001', () => {
       expect(downSql).toContain('ALTER TABLE menu_categories DROP COLUMN IF EXISTS is_sample;');
     });
   });
+
+  describe('Database Migrations 0020: Approver PIN Lockout Persistence', () => {
+    it('has both up and down SQL migration files for 0020', () => {
+      const upFile = path.join(migrationsDir, '0020_pin_lockout.up.sql');
+      const downFile = path.join(migrationsDir, '0020_pin_lockout.down.sql');
+
+      expect(fs.existsSync(upFile)).toBe(true);
+      expect(fs.existsSync(downFile)).toBe(true);
+    });
+
+    it('migration 0020 up adds pin_failed_attempts and pin_locked_until columns to users table', () => {
+      const upSql = fs.readFileSync(path.join(migrationsDir, '0020_pin_lockout.up.sql'), 'utf8');
+
+      expect(upSql).toContain(
+        'ALTER TABLE users ADD COLUMN IF NOT EXISTS pin_failed_attempts INT NOT NULL DEFAULT 0;',
+      );
+      expect(upSql).toContain(
+        'ALTER TABLE users ADD COLUMN IF NOT EXISTS pin_locked_until TIMESTAMPTZ;',
+      );
+    });
+
+    it('migration 0020 down drops pin_locked_until and pin_failed_attempts safely', () => {
+      const downSql = fs.readFileSync(
+        path.join(migrationsDir, '0020_pin_lockout.down.sql'),
+        'utf8',
+      );
+
+      expect(downSql).toContain('ALTER TABLE users DROP COLUMN IF EXISTS pin_locked_until;');
+      expect(downSql).toContain('ALTER TABLE users DROP COLUMN IF EXISTS pin_failed_attempts;');
+    });
+  });
+
+  describe('Database Migrations 0021: Dedicated Login Throttle Table', () => {
+    it('has both up and down SQL migration files for 0021', () => {
+      const upFile = path.join(migrationsDir, '0021_login_throttle.up.sql');
+      const downFile = path.join(migrationsDir, '0021_login_throttle.down.sql');
+
+      expect(fs.existsSync(upFile)).toBe(true);
+      expect(fs.existsSync(downFile)).toBe(true);
+    });
+
+    it('migration 0021 up creates login_throttle table with unique user_id and ip constraint', () => {
+      const upSql = fs.readFileSync(path.join(migrationsDir, '0021_login_throttle.up.sql'), 'utf8');
+
+      expect(upSql).toContain('CREATE TABLE IF NOT EXISTS login_throttle');
+      expect(upSql).toContain('user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE');
+      expect(upSql).toContain('ip TEXT NOT NULL');
+      expect(upSql).toContain('attempts INT NOT NULL DEFAULT 0');
+      expect(upSql).toContain('blocked_until TIMESTAMPTZ');
+      expect(upSql).toContain('CONSTRAINT login_throttle_user_id_ip_unique UNIQUE (user_id, ip)');
+      expect(upSql).toContain('CREATE INDEX IF NOT EXISTS login_throttle_user_id_ip_idx');
+      expect(upSql).toContain('CREATE INDEX IF NOT EXISTS login_throttle_blocked_until_idx');
+    });
+
+    it('migration 0021 down drops login_throttle safely', () => {
+      const downSql = fs.readFileSync(
+        path.join(migrationsDir, '0021_login_throttle.down.sql'),
+        'utf8',
+      );
+
+      expect(downSql).toContain('DROP TABLE IF EXISTS login_throttle CASCADE;');
+    });
+  });
 });

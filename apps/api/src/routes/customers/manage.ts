@@ -328,14 +328,21 @@ export async function registerCustomerManageRoutes(app: FastifyInstance): Promis
       const [loyaltyAcc] = await tenant.db
         .select()
         .from(loyaltyAccounts)
-        .where(and(eq(loyaltyAccounts.customerId, id), eq(loyaltyAccounts.restaurantId, restaurantId)))
+        .where(
+          and(eq(loyaltyAccounts.customerId, id), eq(loyaltyAccounts.restaurantId, restaurantId)),
+        )
         .limit(1);
 
       const customerLoyaltyTx = loyaltyAcc
         ? await tenant.db
             .select()
             .from(loyaltyTransactions)
-            .where(and(eq(loyaltyTransactions.accountId, loyaltyAcc.id), eq(loyaltyTransactions.restaurantId, restaurantId)))
+            .where(
+              and(
+                eq(loyaltyTransactions.accountId, loyaltyAcc.id),
+                eq(loyaltyTransactions.restaurantId, restaurantId),
+              ),
+            )
             .orderBy(desc(loyaltyTransactions.createdAt))
         : [];
 
@@ -380,4 +387,3 @@ export async function registerCustomerManageRoutes(app: FastifyInstance): Promis
     },
   );
 }
-

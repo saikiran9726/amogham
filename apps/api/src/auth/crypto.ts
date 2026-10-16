@@ -9,15 +9,77 @@ const ARGON2_OPTIONS: argon2.Options = {
   parallelism: 1,
 };
 
+export class Semaphore {
+  private current = 0;
+  private queue: (() => void)[] = [];
+
+  constructor(public readonly max: number) {}
+
+  async acquire(): Promise<() => void> {
+    if (this.current < this.max) {
+      this.current++;
+      let released = false;
+      return () => {
+        if (released) return;
+        released = true;
+        this.current--;
+        const next = this.queue.shift();
+        if (next) {
+          this.current++;
+          next();
+        }
+      };
+    }
+
+    return new Promise<() => void>((resolve) => {
+      this.queue.push(() => {
+        let released = false;
+        resolve(() => {
+          if (released) return;
+          released = true;
+          this.current--;
+          const next = this.queue.shift();
+          if (next) {
+            this.current++;
+            next();
+          }
+        });
+      });
+    });
+  }
+
+  async runExclusive<T>(fn: () => Promise<T>): Promise<T> {
+    const release = await this.acquire();
+    try {
+      return await fn();
+    } finally {
+      release();
+    }
+  }
+
+  get activeCount(): number {
+    return this.current;
+  }
+
+  get queuedCount(): number {
+    return this.queue.length;
+  }
+}
+
+const ARGON2_CONCURRENCY = process.env.ARGON2_CONCURRENCY
+  ? parseInt(process.env.ARGON2_CONCURRENCY, 10)
+  : 4;
+export const argon2Semaphore = new Semaphore(ARGON2_CONCURRENCY);
+
 /**
- * Hashes a password using Argon2id.
+ * Hashes a password using Argon2id with semaphore protection against threadpool starvation.
  */
 export async function hashPassword(password: string): Promise<string> {
-  return argon2.hash(password, ARGON2_OPTIONS);
+  return argon2Semaphore.runExclusive(() => argon2.hash(password, ARGON2_OPTIONS));
 }
 
 /**
- * Verifies a password against an Argon2id hash using constant-time comparison.
+ * Verifies a password against an Argon2id hash using constant-time comparison with semaphore protection.
  */
 export async function verifyPassword({
   hash,
@@ -26,22 +88,24 @@ export async function verifyPassword({
   hash: string;
   secret: string;
 }): Promise<boolean> {
-  try {
-    return await argon2.verify(hash, secret);
-  } catch {
-    return false;
-  }
+  return argon2Semaphore.runExclusive(async () => {
+    try {
+      return await argon2.verify(hash, secret);
+    } catch {
+      return false;
+    }
+  });
 }
 
 /**
- * Hashes a 4-6 digit numeric PIN using Argon2id.
+ * Hashes a 4-6 digit numeric PIN using Argon2id with semaphore protection.
  */
 export async function hashPin(pin: string): Promise<string> {
-  return argon2.hash(pin, ARGON2_OPTIONS);
+  return argon2Semaphore.runExclusive(() => argon2.hash(pin, ARGON2_OPTIONS));
 }
 
 /**
- * Verifies a PIN against an Argon2id hash.
+ * Verifies a PIN against an Argon2id hash with semaphore protection.
  */
 export async function verifyPin({
   hash,
@@ -50,11 +114,13 @@ export async function verifyPin({
   hash: string;
   secret: string;
 }): Promise<boolean> {
-  try {
-    return await argon2.verify(hash, secret);
-  } catch {
-    return false;
-  }
+  return argon2Semaphore.runExclusive(async () => {
+    try {
+      return await argon2.verify(hash, secret);
+    } catch {
+      return false;
+    }
+  });
 }
 
 /**

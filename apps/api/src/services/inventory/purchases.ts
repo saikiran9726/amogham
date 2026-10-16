@@ -282,7 +282,8 @@ export class InventoryPurchaseService {
           supplierId:
             input.supplierId !== undefined ? input.supplierId : existingPurchase.supplierId,
           purchaseDate: input.purchaseDate ?? existingPurchase.purchaseDate,
-          invoiceRef: input.invoiceRef !== undefined ? input.invoiceRef : existingPurchase.invoiceRef,
+          invoiceRef:
+            input.invoiceRef !== undefined ? input.invoiceRef : existingPurchase.invoiceRef,
           totalPaise: totalPurchasePaise,
           paidStatus: input.paidStatus ?? existingPurchase.paidStatus,
           note: input.note !== undefined ? input.note : existingPurchase.note,

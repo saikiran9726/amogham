@@ -13,7 +13,13 @@ import {
   verifyDummyCredential,
 } from '../../auth/crypto.js';
 import { signAccessToken } from '../../auth/jwt.js';
-import { isAccountLocked, recordFailedAttemptAtomic, resetLockoutAtomic } from '../../auth/lockout.js';
+import {
+  isAccountLocked,
+  checkLoginThrottle,
+  recordFailedAttemptWithThrottleAtomic,
+  resetLockoutAtomic,
+  resetLoginThrottleAtomic,
+} from '../../auth/lockout.js';
 import { registerRouteGuard } from '../../auth/middleware.js';
 import { recordAuditLog } from '../../services/audit.js';
 import { checkLoginIpUsernameRateLimit } from '../../plugins/rate-limit.js';
@@ -88,17 +94,23 @@ export async function registerAuthLoginRoutes(app: FastifyInstance): Promise<voi
         throw genericAuthError();
       }
 
-      // 2. Check if account is currently locked out
-      if (isAccountLocked(user)) {
+      // 2. Check if account is currently locked out or IP is throttled
+      const throttleState = await checkLoginThrottle(system.db, user.id, request.ip);
+      if (isAccountLocked(user) || throttleState.throttled) {
         await verifyDummyCredential(body.password || body.pin || 'dummy_credential');
 
         await recordAuditLog({
           restaurantId: user.restaurantId,
           userId: user.id,
-          action: 'auth.login_locked',
+          action: isAccountLocked(user) ? 'auth.login_locked' : 'auth.login_throttled',
           entity: 'user',
           entityId: user.id,
-          after: { failureReason: 'account_locked', lockedUntil: user.lockedUntil },
+          after: {
+            failureReason: isAccountLocked(user) ? 'account_locked' : 'ip_throttled',
+            lockedUntil: user.lockedUntil,
+            blockedUntil: throttleState.blockedUntil,
+            ip: request.ip,
+          },
           request,
         });
 
@@ -142,9 +154,32 @@ export async function registerAuthLoginRoutes(app: FastifyInstance): Promise<voi
 
       // 5. Handle failed authentication atomically
       if (!isValid) {
-        const lockoutState = await recordFailedAttemptAtomic(system.db, user.id);
+        const isOwner = userRole === Roles.OWNER;
+        const lockoutState = await recordFailedAttemptWithThrottleAtomic(
+          system.db,
+          user.id,
+          request.ip,
+          isOwner,
+        );
         if (lockoutState.lockedUntil) {
           MetricsService.incrementLockout(user.restaurantId);
+        }
+
+        // If an owner account is targeted by brute force (failedAttempts >= max), log an audit warning
+        if (isOwner && lockoutState.failedAttempts >= env.MAX_FAILED_LOGIN_ATTEMPTS) {
+          await recordAuditLog({
+            restaurantId: user.restaurantId,
+            userId: user.id,
+            action: 'auth.brute_force_detected',
+            entity: 'user',
+            entityId: user.id,
+            after: {
+              warning: 'Owner account targeted by brute force; hard-lock prevented',
+              failedAttempts: lockoutState.failedAttempts,
+              ip: request.ip,
+            },
+            request,
+          });
         }
 
         await recordAuditLog({
@@ -157,6 +192,8 @@ export async function registerAuthLoginRoutes(app: FastifyInstance): Promise<voi
             failureReason: 'invalid_credential',
             failedAttempts: lockoutState.failedAttempts,
             locked: Boolean(lockoutState.lockedUntil),
+            throttled: lockoutState.throttled,
+            blockedUntil: lockoutState.blockedUntil,
           },
           request,
         });
@@ -164,8 +201,9 @@ export async function registerAuthLoginRoutes(app: FastifyInstance): Promise<voi
         throw genericAuthError();
       }
 
-      // 6. Successful login: atomically reset failed attempts & record lastLoginAt
+      // 6. Successful login: atomically reset failed attempts, throttle & record lastLoginAt
       await resetLockoutAtomic(system.db, user.id);
+      await resetLoginThrottleAtomic(system.db, user.id, request.ip);
 
       // 7. Fetch permissions
       const roleName = userRole;

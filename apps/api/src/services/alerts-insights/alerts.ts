@@ -359,7 +359,8 @@ export class AlertsService {
    */
   static async upsertAlert(params: {
     restaurantId: string;
-    type: 'cash_mismatch' | 'low_stock' | 'high_expense' | 'payment_reconciliation' | 'profit_decline';
+    type:
+      'cash_mismatch' | 'low_stock' | 'high_expense' | 'payment_reconciliation' | 'profit_decline';
     severity: 'info' | 'warning' | 'critical';
     dedupeKey: string;
     payload: AlertItemPayload;
@@ -550,7 +551,8 @@ export class AlertsService {
       throw AppError.notFound('Alert not found');
     }
 
-    const days = input.duration === '7d' ? 7 : (input as { durationDays?: number }).durationDays || 1;
+    const days =
+      input.duration === '7d' ? 7 : (input as { durationDays?: number }).durationDays || 1;
     const ms = days * 86400 * 1000;
     const snoozedUntil = new Date(Date.now() + ms);
 

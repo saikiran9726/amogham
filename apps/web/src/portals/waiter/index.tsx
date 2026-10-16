@@ -13,6 +13,7 @@ import { formatPaiseToRupeeString } from '@restaurant-os/shared';
 import { BillPreviewSheet } from './BillPreviewSheet.js';
 import { useSocketStore } from '../../stores/useSocketStore.js';
 import { useWaiterKitchenFeed, waiterKitchenFeedKey } from './useWaiterKitchenFeed.js';
+import { useSocketFallbackPollInterval } from '../../utils/polling.js';
 
 export const WaiterOrders: React.FC = () => {
   const queryClient = useQueryClient();
@@ -25,6 +26,7 @@ export const WaiterOrders: React.FC = () => {
       void queryClient.invalidateQueries({ queryKey: waiterKitchenFeedKey });
     }
   }, [kotStatusEventVersion, queryClient]);
+  const fallbackPollInterval = useSocketFallbackPollInterval();
   const {
     data: recentOrders,
     isPending: recentOrdersPending,
@@ -44,7 +46,7 @@ export const WaiterOrders: React.FC = () => {
     retry: false,
     staleTime: 0,
     refetchOnMount: 'always',
-    refetchInterval: 15_000,
+    refetchInterval: fallbackPollInterval,
   });
 
   const completedTakeawayOrders = (recentOrders || []).filter((order) => {

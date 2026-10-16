@@ -153,79 +153,79 @@ export const CustomerSheet: React.FC<CustomerSheetProps> = ({ isOpen, onClose })
         let cached: CachedCustomer | undefined;
 
         try {
-        // 1. Try local Dexie cache first for instantaneous offline response
-        cached = await localDb.cachedCustomers.where('phone').equals(normalized).first();
-        if (cancelled) return;
-        if (cached) {
-          setActiveLookupResult({
-            id: cached.id,
-            phone: cached.phone,
-            name: cached.name,
-            preferences: cached.preferences,
-            favouriteItems: cached.favouriteItems || [],
-            lastOrder: cached.lastOrder ?? null,
-            lastVisitAt: cached.lastVisitAt ?? null,
-            visitCount: cached.visitCount ?? 1,
-          });
-          if (!editedFieldsRef.current.name) setName(cached.name || '');
-          if (!editedFieldsRef.current.tags) setTags(cached.preferences?.tags || []);
-          if (!editedFieldsRef.current.note) setNote(cached.preferences?.note || '');
-          setIsCreatingNew(false);
-        }
-
-        // 2. Fetch fresh profile from API
-        if (navigator.onLine) {
-          const res = await apiFetch<{ customer: CustomerWaiterSummary }>(
-            `/customers/lookup?phone=${encodeURIComponent(normalized)}`,
-          );
+          // 1. Try local Dexie cache first for instantaneous offline response
+          cached = await localDb.cachedCustomers.where('phone').equals(normalized).first();
           if (cancelled) return;
-          if (res?.customer) {
-            setActiveLookupResult(res.customer);
-            if (!editedFieldsRef.current.name) setName(res.customer.name || '');
-            if (!editedFieldsRef.current.tags) setTags(res.customer.preferences?.tags || []);
-            if (!editedFieldsRef.current.note) setNote(res.customer.preferences?.note || '');
-            setIsCreatingNew(false);
-
-            // Update local dexie cache
-            await localDb.cachedCustomers.put({
-              id: res.customer.id,
-              phone: res.customer.phone,
-              name: res.customer.name,
-              preferences: res.customer.preferences,
-              favouriteItems: res.customer.favouriteItems,
-              lastOrder: res.customer.lastOrder,
-              lastVisitAt: res.customer.lastVisitAt,
-              visitCount: res.customer.visitCount,
-              updatedAt: Date.now(),
+          if (cached) {
+            setActiveLookupResult({
+              id: cached.id,
+              phone: cached.phone,
+              name: cached.name,
+              preferences: cached.preferences,
+              favouriteItems: cached.favouriteItems || [],
+              lastOrder: cached.lastOrder ?? null,
+              lastVisitAt: cached.lastVisitAt ?? null,
+              visitCount: cached.visitCount ?? 1,
             });
+            if (!editedFieldsRef.current.name) setName(cached.name || '');
+            if (!editedFieldsRef.current.tags) setTags(cached.preferences?.tags || []);
+            if (!editedFieldsRef.current.note) setNote(cached.preferences?.note || '');
+            setIsCreatingNew(false);
+          }
+
+          // 2. Fetch fresh profile from API
+          if (navigator.onLine) {
+            const res = await apiFetch<{ customer: CustomerWaiterSummary }>(
+              `/customers/lookup?phone=${encodeURIComponent(normalized)}`,
+            );
+            if (cancelled) return;
+            if (res?.customer) {
+              setActiveLookupResult(res.customer);
+              if (!editedFieldsRef.current.name) setName(res.customer.name || '');
+              if (!editedFieldsRef.current.tags) setTags(res.customer.preferences?.tags || []);
+              if (!editedFieldsRef.current.note) setNote(res.customer.preferences?.note || '');
+              setIsCreatingNew(false);
+
+              // Update local dexie cache
+              await localDb.cachedCustomers.put({
+                id: res.customer.id,
+                phone: res.customer.phone,
+                name: res.customer.name,
+                preferences: res.customer.preferences,
+                favouriteItems: res.customer.favouriteItems,
+                lastOrder: res.customer.lastOrder,
+                lastVisitAt: res.customer.lastVisitAt,
+                visitCount: res.customer.visitCount,
+                updatedAt: Date.now(),
+              });
+            } else {
+              setActiveLookupResult(null);
+              setIsCreatingNew(true);
+            }
+          } else if (!cached) {
+            setActiveLookupResult(null);
+            setIsCreatingNew(true);
+          }
+        } catch (err: unknown) {
+          if (cancelled) return;
+          const status =
+            (err as { status?: number; statusCode?: number })?.status ||
+            (err as { status?: number; statusCode?: number })?.statusCode;
+          if (status === 404) {
+            setActiveLookupResult(null);
+            setIsCreatingNew(true);
           } else {
-            setActiveLookupResult(null);
-            setIsCreatingNew(true);
+            console.error('Customer lookup error:', err);
+            // A valid phone still needs a usable form when the lookup service is unavailable.
+            if (!cached) {
+              setActiveLookupResult(null);
+              setIsCreatingNew(true);
+            }
           }
-        } else if (!cached) {
-          setActiveLookupResult(null);
-          setIsCreatingNew(true);
+        } finally {
+          if (!cancelled) setIsLoading(false);
         }
-      } catch (err: unknown) {
-        if (cancelled) return;
-        const status =
-          (err as { status?: number; statusCode?: number })?.status ||
-          (err as { status?: number; statusCode?: number })?.statusCode;
-        if (status === 404) {
-          setActiveLookupResult(null);
-          setIsCreatingNew(true);
-        } else {
-          console.error('Customer lookup error:', err);
-          // A valid phone still needs a usable form when the lookup service is unavailable.
-          if (!cached) {
-            setActiveLookupResult(null);
-            setIsCreatingNew(true);
-          }
-        }
-      } finally {
-        if (!cancelled) setIsLoading(false);
-      }
-    })();
+      })();
     }, 200);
 
     return () => {
@@ -276,10 +276,7 @@ export const CustomerSheet: React.FC<CustomerSheetProps> = ({ isOpen, onClose })
     } catch (err: unknown) {
       addToast({
         type: 'danger',
-        message: reportCustomerRequestFailure(
-          `/customers/${cust.id}`,
-          err as CustomerRequestError,
-        ),
+        message: reportCustomerRequestFailure(`/customers/${cust.id}`, err as CustomerRequestError),
       });
     } finally {
       setIsSaving(false);
@@ -370,9 +367,7 @@ export const CustomerSheet: React.FC<CustomerSheetProps> = ({ isOpen, onClose })
   };
 
   // 1-tap Reorder Last order
-  const handleReorderLast = (
-    lastItems: NonNullable<CustomerWaiterSummary['lastOrder']>,
-  ) => {
+  const handleReorderLast = (lastItems: NonNullable<CustomerWaiterSummary['lastOrder']>) => {
     if (!lastItems || lastItems.length === 0) return;
     for (const item of lastItems) {
       for (let i = 0; i < (item.qty || 1); i++) {

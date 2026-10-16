@@ -6,9 +6,11 @@ import { Skeleton } from '../../components/ui/UtilityComponents.js';
 import { apiFetch } from '../../stores/useAuthStore.js';
 import { useToastStore } from '../../stores/useToastStore.js';
 import { QrCode, CheckCircle2, Clock, AlertTriangle } from 'lucide-react';
+import { useSocketFallbackPollInterval } from '../../utils/polling.js';
 
 export const OwnerPaymentsView: React.FC = () => {
   const { addToast } = useToastStore();
+  const fallbackPollInterval = useSocketFallbackPollInterval();
 
   const { data, isLoading, refetch } = useQuery<{
     pendingPayments: Array<{
@@ -24,7 +26,7 @@ export const OwnerPaymentsView: React.FC = () => {
   }>({
     queryKey: ['owner-pending-payments'],
     queryFn: () => apiFetch('/payments/pending'),
-    refetchInterval: 5000,
+    refetchInterval: fallbackPollInterval,
   });
 
   const pendingList = data?.pendingPayments || [];
@@ -36,7 +38,10 @@ export const OwnerPaymentsView: React.FC = () => {
       addToast({ type: 'success', message: 'Payment confirmed successfully' });
       void refetch();
     } catch (err: unknown) {
-      addToast({ type: 'danger', message: err instanceof Error ? err.message : 'Confirmation failed' });
+      addToast({
+        type: 'danger',
+        message: err instanceof Error ? err.message : 'Confirmation failed',
+      });
     }
   };
 

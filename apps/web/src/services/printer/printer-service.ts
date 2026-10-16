@@ -5,6 +5,7 @@ import { BrowserPrintDriver } from './drivers/browser-driver.js';
 import { BluetoothDriver } from './drivers/bluetooth-driver.js';
 import { UsbDriver } from './drivers/usb-driver.js';
 import { LanDriver } from './drivers/lan-driver.js';
+import { useAuthStore } from '../../stores/useAuthStore.js';
 
 const DEVICE_PRINTER_KEY = 'restaurant_os_device_printer';
 
@@ -114,7 +115,7 @@ export class PrinterService {
         lastAttemptAt: Date.now(),
       });
 
-      const authToken = options.token || localStorage.getItem('access_token') || '';
+      const authToken = options.token || useAuthStore.getState().accessToken || '';
       const headers: Record<string, string> = {
         'Content-Type': 'application/json',
       };
@@ -360,7 +361,7 @@ export class PrinterService {
     if (!job) return { success: false, error: 'Print job not found' };
     if (!job.auditPending) return { success: true };
 
-    const authToken = localStorage.getItem('access_token') || '';
+    const authToken = useAuthStore.getState().accessToken || '';
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };
     if (authToken) headers['Authorization'] = `Bearer ${authToken}`;
     const type =
@@ -424,7 +425,7 @@ export class PrinterService {
    */
   public async testPrint(printer: PrinterConfig, token?: string): Promise<PrintResult> {
     try {
-      const authToken = token || localStorage.getItem('access_token') || '';
+      const authToken = token || useAuthStore.getState().accessToken || '';
       const headers: Record<string, string> = {
         'Content-Type': 'application/json',
       };

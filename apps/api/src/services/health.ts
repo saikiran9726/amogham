@@ -3,11 +3,7 @@ import { db } from '../db/client.js';
 import { healthModels, healthSnapshots } from '../db/schema/health.js';
 import { dailySummaries } from '../db/schema/daily-summaries.js';
 import { bills } from '../db/schema/bills.js';
-import {
-  purchases,
-  inventoryItems,
-  stockMovements,
-} from '../db/schema/inventory.js';
+import { purchases, inventoryItems, stockMovements } from '../db/schema/inventory.js';
 import { expenses, expenseCategories } from '../db/schema/expenses.js';
 import { kots } from '../db/schema/kots.js';
 import { customers } from '../db/schema/customers.js';

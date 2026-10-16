@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiFetch } from '../../stores/useAuthStore.js';
 import { useToastStore } from '../../stores/useToastStore.js';
+import { useSocketFallbackPollInterval } from '../../utils/polling.js';
 import { Button } from '../../components/ui/Button.js';
 import { KpiCard } from '../../components/ui/Cards.js';
 import { SettingsExampleCalculator } from '../../components/SettingsExampleCalculator.js';
@@ -37,10 +38,11 @@ export const OwnerLoyalty: React.FC = () => {
   const { addToast } = useToastStore();
 
   // Queries
+  const fallbackPollInterval = useSocketFallbackPollInterval();
   const { data: overview, isLoading: isOverviewLoading } = useQuery<LoyaltyOverviewSummary>({
     queryKey: ['loyalty-overview'],
     queryFn: () => apiFetch('/loyalty/overview'),
-    refetchInterval: 10000,
+    refetchInterval: fallbackPollInterval,
   });
 
   const { data: settingsData, isLoading: isSettingsLoading } = useQuery<LoyaltySettings>({
@@ -150,7 +152,11 @@ export const OwnerLoyalty: React.FC = () => {
     updateSettingsMutation.mutate(formData);
   };
 
-  const handleTierChange = (index: number, field: keyof LoyaltyTier, value: LoyaltyTier[keyof LoyaltyTier]) => {
+  const handleTierChange = (
+    index: number,
+    field: keyof LoyaltyTier,
+    value: LoyaltyTier[keyof LoyaltyTier],
+  ) => {
     const newTiers = [...(formData.tiers || [])];
     newTiers[index] = { ...newTiers[index]!, [field]: value };
     setFormData({ ...formData, tiers: newTiers });
@@ -182,7 +188,11 @@ export const OwnerLoyalty: React.FC = () => {
     setFormData({ ...formData, tiers: newTiers });
   };
 
-  const handleOpenAdjustModal = (customer?: { id: string; name?: string | null; phone: string }) => {
+  const handleOpenAdjustModal = (customer?: {
+    id: string;
+    name?: string | null;
+    phone: string;
+  }) => {
     if (customer) {
       setAdjustCustomerId(customer.id);
       setAdjustCustomerSearch(`${customer.name || 'Guest'} (${customer.phone})`);

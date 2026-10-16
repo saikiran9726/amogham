@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { apiFetch } from '../../stores/useAuthStore.js';
 import { notifyWaiterKotReady } from '../../stores/useSocketStore.js';
 import type { KitchenKot } from '../../stores/useKitchenStore.js';
+import { useSocketFallbackPollInterval } from '../../utils/polling.js';
 
 export const waiterKitchenFeedKey = ['waiter-active-kots'] as const;
 
@@ -56,6 +57,7 @@ function parseKitchenState(value: unknown): WaiterKitchenState | null {
 /** Shared query powers Active Orders and keeps ready notifications alive across waiter routes. */
 export function useWaiterKitchenFeed() {
   const previousStatuses = useRef<Map<string, string> | null>(null);
+  const fallbackPollInterval = useSocketFallbackPollInterval();
   const query = useQuery({
     queryKey: waiterKitchenFeedKey,
     queryFn: async () => {
@@ -72,7 +74,7 @@ export function useWaiterKitchenFeed() {
     // The app disables window-focus refetch globally. Force a fresh feed when
     // a waiter returns to a backgrounded tab, where interval polling pauses.
     refetchOnWindowFocus: 'always',
-    refetchInterval: 15_000,
+    refetchInterval: fallbackPollInterval,
   });
 
   useEffect(() => {

@@ -18,9 +18,7 @@ interface HubMachineContext {
   restaurantId: string;
 }
 
-export async function authenticateHubMachine(
-  request: FastifyRequest,
-): Promise<HubMachineContext> {
+export async function authenticateHubMachine(request: FastifyRequest): Promise<HubMachineContext> {
   // 1. Refuse user JWTs / Authorization headers for machine access
   const authHeader = request.headers.authorization;
   if (authHeader && authHeader.toLowerCase().startsWith('bearer ')) {
@@ -31,28 +29,42 @@ export async function authenticateHubMachine(
 
   // 2. Extract and validate X-Hub-Key header
   const hubKeyHeader = request.headers['x-hub-key'];
-  if (!hubKeyHeader || typeof hubKeyHeader !== 'string') {
+  if (!hubKeyHeader || typeof hubKeyHeader !== 'string' || !hubKeyHeader.trim()) {
     throw AppError.unauthorized('Missing X-Hub-Key header for machine authentication');
   }
 
   const requestedRestaurantId = request.headers['x-restaurant-id'] as string | undefined;
   const requestedDeviceId = request.headers['x-hub-device-id'] as string | undefined;
 
+  if (
+    !requestedRestaurantId ||
+    typeof requestedRestaurantId !== 'string' ||
+    !requestedRestaurantId.trim()
+  ) {
+    throw AppError.unauthorized(
+      'Missing required X-Restaurant-Id header for machine authentication',
+    );
+  }
+
+  if (!requestedDeviceId || typeof requestedDeviceId !== 'string' || !requestedDeviceId.trim()) {
+    throw AppError.unauthorized(
+      'Missing required X-Hub-Device-Id header for machine authentication',
+    );
+  }
+
   const system = forSystem();
 
-  // 3. Find candidate active hubs
-  const conditions = [eq(hubRegistry.isActive, true)];
-  if (requestedRestaurantId) {
-    conditions.push(eq(hubRegistry.restaurantId, requestedRestaurantId));
-  }
-  if (requestedDeviceId) {
-    conditions.push(eq(hubRegistry.deviceId, requestedDeviceId));
-  }
-
+  // 3. Find candidate active hub matching exact restaurant and device
   const candidates = await system.db
     .select()
     .from(hubRegistry)
-    .where(and(...conditions));
+    .where(
+      and(
+        eq(hubRegistry.isActive, true),
+        eq(hubRegistry.restaurantId, requestedRestaurantId.trim()),
+        eq(hubRegistry.deviceId, requestedDeviceId.trim()),
+      ),
+    );
 
   let matchedHub: (typeof candidates)[0] | null = null;
   for (const candidate of candidates) {
@@ -105,6 +117,7 @@ export async function registerHubMachineRoutes(app: FastifyInstance): Promise<vo
     const parsed = syncPushBatchSchema.parse(request.body);
 
     const result = await SyncEngineService.processPushBatch(restaurantId, parsed, {
+      userId: `machine:hub:${hub.deviceId}`,
       permissions: [
         Permissions.ORDER_CREATE,
         Permissions.ORDER_UPDATE,

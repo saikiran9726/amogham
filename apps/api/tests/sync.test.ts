@@ -52,7 +52,12 @@ describe('Offline Sync & Local Hub Integration Tests', () => {
 
   afterAll(async () => {
     try {
-      await pool.query('DELETE FROM restaurants WHERE id = $1', [testRestaurantId]);
+      await pool.query('DELETE FROM hub_registry WHERE restaurant_id = $1', [testRestaurantId]);
+      await pool.query('DELETE FROM sync_events WHERE restaurant_id = $1', [testRestaurantId]);
+      await pool.query('DELETE FROM sync_cursors WHERE restaurant_id = $1', [testRestaurantId]);
+      await pool.query('DELETE FROM dead_letter_commands WHERE restaurant_id = $1', [
+        testRestaurantId,
+      ]);
     } catch {
       // Ignore cleanup error
     }
@@ -245,11 +250,34 @@ describe('Offline Sync & Local Hub Integration Tests', () => {
       expect(res.json().error.code).toBe('TENANT_MISMATCH');
     });
 
-    it('rejects payment.record command pushed by KITCHEN token with FORBIDDEN error code', async () => {
-      const res = await app.inject({
+    it('rejects payment.record command pushed by token without PAYMENT_TAKE with FORBIDDEN error code', async () => {
+      // 1. Kitchen token lacks sync.use and is rejected at route guard with 403
+      const kitchenRes = await app.inject({
         method: 'POST',
         url: '/sync/push',
         headers: { authorization: `Bearer ${kitchenToken}` },
+        payload: {
+          deviceId: 'kitchen-dev-1',
+          batchId: '018f9e1e-2895-7800-9831-000000000010',
+          commands: [],
+        },
+      });
+      expect(kitchenRes.statusCode).toBe(403);
+
+      // 2. Token with sync.use but lacking payment.take reaches batch execution and command is rejected
+      const syncOnlyToken = signAccessToken({
+        userId: '018f9e1e-2895-7800-9831-222222222222',
+        restaurantId: testRestaurantId,
+        username: 'sync_user',
+        name: 'Sync User',
+        role: Roles.WAITER,
+        permissions: [Permissions.SYNC_USE],
+      });
+
+      const res = await app.inject({
+        method: 'POST',
+        url: '/sync/push',
+        headers: { authorization: `Bearer ${syncOnlyToken}` },
         payload: {
           deviceId: 'kitchen-dev-1',
           batchId: '018f9e1e-2895-7800-9831-000000000010',

@@ -38,12 +38,10 @@ describe('Security Regression Audit across ROUTE_REGISTRY', () => {
 
     // Seed test restaurants and users so audit logs and DB constraints succeed
     const { pool } = await import('../src/db/client.js');
-    await pool.query('INSERT INTO restaurants (id, name) VALUES ($1, $2), ($3, $4) ON CONFLICT (id) DO NOTHING', [
-      tenantA,
-      'Security Tenant A',
-      tenantB,
-      'Security Tenant B',
-    ]);
+    await pool.query(
+      'INSERT INTO restaurants (id, name) VALUES ($1, $2), ($3, $4) ON CONFLICT (id) DO NOTHING',
+      [tenantA, 'Security Tenant A', tenantB, 'Security Tenant B'],
+    );
     const userSuffix = generateUuidV7().replaceAll('-', '').slice(0, 10);
     await pool.query(
       `INSERT INTO users (id, restaurant_id, username, password_hash, name, active)

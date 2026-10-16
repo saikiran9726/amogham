@@ -15,15 +15,18 @@ test.describe('Offline-First Resilient Ordering & KOT Deduplication (Task 8)', (
 
     // 3. Verify Offline indicator / banner is visible
     const offlineIndicator = page.locator('text=/offline/i').first();
-    await expect(offlineIndicator).toBeVisible({ timeout: 5000 }).catch(() => {
-      // In case toast or status pill is rendered
-    });
+    await expect(offlineIndicator)
+      .toBeVisible({ timeout: 5000 })
+      .catch(() => {
+        // In case toast or status pill is rendered
+      });
 
     // 4. Enqueue order creation and KOT send into Dexie outbox offline
     const orderId = `e2e-order-${Date.now()}`;
     const syncResult = await page.evaluate(async (oid) => {
       // Access app stores and Dexie in browser context
-      const auth = (window as unknown as { __AUTH_STORE__?: { getState: () => { user: unknown } } }).__AUTH_STORE__;
+      const auth = (window as unknown as { __AUTH_STORE__?: { getState: () => { user: unknown } } })
+        .__AUTH_STORE__;
       const orderPayload = {
         id: oid,
         tableId: 't-1',

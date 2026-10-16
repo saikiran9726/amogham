@@ -29,7 +29,11 @@ import { printerConfigurations, printEvents } from '../../db/schema/printers.js'
 import { paymentRequests } from '../../db/schema/payment-requests.js';
 import { recordAuditLog } from '../audit.js';
 import { emitRealtimeEvent } from '../../realtime/socket.js';
-import { verifyApproverPin } from '../../auth/approval.js';
+import {
+  authorizeApprover,
+  recordApprovalUse,
+  type ApproverVerificationResult,
+} from '../../auth/approval.js';
 import { withIdempotency } from '../../http/idempotency.js';
 import { assertBusinessDateNotLocked } from './PaymentService.js';
 import { batchUpdateBillLines } from './LoyaltyRedemptionService.js';
@@ -68,7 +72,7 @@ export async function assertBillReprintAuthorized(
       'Reprinting a paid bill requires bill.reprint permission or approver PIN',
     );
   }
-  await verifyApproverPin(tx, {
+  const approver = await authorizeApprover(db, {
     restaurantId,
     approverUserId,
     pin,
@@ -79,15 +83,28 @@ export async function assertBillReprintAuthorized(
     actorUserId,
     request,
   });
+
+  await recordApprovalUse(tx, {
+    restaurantId,
+    approver,
+    entity: 'bill',
+    entityId: billId,
+    actorUserId,
+    reason: 'bill_reprint',
+    request,
+  });
 }
 
 export function getRoleDiscountCap(
   roleName: string,
-  settings: {
-    discountCapOwnerPercent?: number | null;
-    discountCapManagerPercent?: number | null;
-    discountCapCashierPercent?: number | null;
-  } | null | undefined,
+  settings:
+    | {
+        discountCapOwnerPercent?: number | null;
+        discountCapManagerPercent?: number | null;
+        discountCapCashierPercent?: number | null;
+      }
+    | null
+    | undefined,
 ): number {
   if (roleName === Roles.OWNER) return settings?.discountCapOwnerPercent ?? 100;
   if (roleName === Roles.MANAGER) return settings?.discountCapManagerPercent ?? 25;
@@ -111,6 +128,22 @@ export class BillingService {
    */
   static async createBill(params: CreateBillServiceParams, executor: DbOrTx = db) {
     const { orderId, restaurantId, userId, roleName, body, idempotencyKey, request } = params;
+
+    let preAuthorizedApprover: ApproverVerificationResult | null = null;
+    const discountPin = body.discount?.pin ?? body.discount?.overridePin;
+    if (body.discount && body.discount.value > 0 && body.discount.approverUserId && discountPin) {
+      preAuthorizedApprover = await authorizeApprover(db, {
+        restaurantId,
+        approverUserId: body.discount.approverUserId,
+        pin: discountPin,
+        allowedRoles: [Roles.OWNER, Roles.MANAGER],
+        reason: body.discount.reason,
+        entity: 'order',
+        entityId: orderId,
+        actorUserId: userId,
+        request,
+      });
+    }
 
     const execution = await executor.transaction(async (tx) => {
       return withIdempotency(
@@ -221,15 +254,26 @@ export class BillingService {
                   `Discount exceeds your allowed role cap of ${capPercent}%. Approver PIN override is required.`,
                 );
               }
-              await verifyApproverPin(tx, {
+              const approver =
+                preAuthorizedApprover ??
+                (await authorizeApprover(db, {
+                  restaurantId,
+                  approverUserId,
+                  pin,
+                  allowedRoles: [Roles.OWNER, Roles.MANAGER],
+                  reason: body.discount.reason,
+                  entity: 'order',
+                  entityId: orderId,
+                  actorUserId: userId,
+                  request,
+                }));
+              await recordApprovalUse(tx, {
                 restaurantId,
-                approverUserId,
-                pin,
-                allowedRoles: [Roles.OWNER, Roles.MANAGER],
-                reason: body.discount.reason,
+                approver,
                 entity: 'order',
                 entityId: orderId,
                 actorUserId: userId,
+                reason: body.discount.reason,
                 request,
               });
             }
@@ -490,6 +534,22 @@ export class BillingService {
   ) {
     const { restaurantId, billId, userId, roleName, body, request } = params;
 
+    let preAuthorizedApprover: ApproverVerificationResult | null = null;
+    const discountPin = body.pin ?? body.overridePin;
+    if (body.approverUserId && discountPin) {
+      preAuthorizedApprover = await authorizeApprover(db, {
+        restaurantId,
+        approverUserId: body.approverUserId,
+        pin: discountPin,
+        allowedRoles: [Roles.OWNER, Roles.MANAGER],
+        reason: body.reason,
+        entity: 'bill',
+        entityId: billId,
+        actorUserId: userId,
+        request,
+      });
+    }
+
     const updated = await executor.transaction(async (tx) => {
       const billRows = await tx
         .select()
@@ -504,9 +564,7 @@ export class BillingService {
       await assertBusinessDateNotLocked(restaurantId, bill.businessDate, tx);
 
       if (bill.status !== 'unpaid' && bill.status !== 'draft') {
-        throw AppError.badRequest(
-          `Cannot modify discount on a bill with status "${bill.status}"`,
-        );
+        throw AppError.badRequest(`Cannot modify discount on a bill with status "${bill.status}"`);
       }
 
       const existingPayments = await tx
@@ -544,15 +602,26 @@ export class BillingService {
             `Discount exceeds your allowed role cap of ${capPercent}%. Approver PIN override is required.`,
           );
         }
-        await verifyApproverPin(tx, {
+        const approver =
+          preAuthorizedApprover ??
+          (await authorizeApprover(db, {
+            restaurantId,
+            approverUserId,
+            pin,
+            allowedRoles: [Roles.OWNER, Roles.MANAGER],
+            reason: body.reason,
+            entity: 'bill',
+            entityId: bill.id,
+            actorUserId: userId,
+            request,
+          }));
+        await recordApprovalUse(tx, {
           restaurantId,
-          approverUserId,
-          pin,
-          allowedRoles: [Roles.OWNER, Roles.MANAGER],
-          reason: body.reason,
+          approver,
           entity: 'bill',
           entityId: bill.id,
           actorUserId: userId,
+          reason: body.reason,
           request,
         });
       }
@@ -654,10 +723,7 @@ export class BillingService {
           ),
         );
 
-      const refreshedLines = await tx
-        .select()
-        .from(billLines)
-        .where(eq(billLines.billId, billId));
+      const refreshedLines = await tx.select().from(billLines).where(eq(billLines.billId, billId));
 
       return {
         bill: updatedBill,
@@ -757,7 +823,16 @@ export class BillingService {
     },
     executor: DbOrTx = db,
   ) {
-    const { restaurantId, billId, userId, permissions: userPerms, approverUserId, pin, ownerPin, request } = params;
+    const {
+      restaurantId,
+      billId,
+      userId,
+      permissions: userPerms,
+      approverUserId,
+      pin,
+      ownerPin,
+      request,
+    } = params;
 
     const [bill] = await executor
       .select({ id: bills.id, status: bills.status, printedCount: bills.printedCount })
@@ -811,11 +886,19 @@ export class BillingService {
 
     const lines = await executor.select().from(billLines).where(eq(billLines.billId, billId));
     const billPayments = await executor.select().from(payments).where(eq(payments.billId, billId));
-    const [order] = await executor.select().from(orders).where(eq(orders.id, bill.orderId)).limit(1);
+    const [order] = await executor
+      .select()
+      .from(orders)
+      .where(eq(orders.id, bill.orderId))
+      .limit(1);
 
     let tableName: string | undefined;
     if (order?.tableId) {
-      const [table] = await executor.select().from(tables).where(eq(tables.id, order.tableId)).limit(1);
+      const [table] = await executor
+        .select()
+        .from(tables)
+        .where(eq(tables.id, order.tableId))
+        .limit(1);
       tableName = table?.label;
     }
 

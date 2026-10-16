@@ -4,9 +4,13 @@ export default defineConfig({
   test: {
     globals: true,
     environment: 'node',
+    testTimeout: 90000,
+    hookTimeout: 60000,
+    fileParallelism: false,
+    setupFiles: ['./tests/setup.ts'],
     coverage: {
       provider: 'v8',
-      reporter: ['text', 'json', 'html'],
+      reporter: ['text', 'json', 'html', 'json-summary'],
       include: ['src/**'],
       exclude: ['src/**/*.test.ts', 'dist/**'],
       thresholds: {

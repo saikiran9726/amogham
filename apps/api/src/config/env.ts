@@ -1,4 +1,5 @@
 import dotenv from 'dotenv';
+import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import crypto from 'node:crypto';
 import { z } from 'zod';
@@ -33,6 +34,10 @@ export const envSchema = z
 
     // Auth & Security
     JWT_SECRET: z.string().min(32, 'JWT_SECRET must be at least 32 characters'),
+    JWT_SECRET_PREVIOUS: z
+      .string()
+      .min(32, 'JWT_SECRET_PREVIOUS must be at least 32 characters')
+      .optional(),
     COOKIE_SECRET: z.string().min(32, 'COOKIE_SECRET must be at least 32 characters'),
     COOKIE_SECURE: strictBoolean(false),
     COOKIE_SAMESITE: z.enum(['lax', 'strict', 'none']).default('lax'),
@@ -41,9 +46,8 @@ export const envSchema = z
     REFRESH_TOKEN_EXPIRES_DAYS: z.coerce.number().default(7),
     TRUST_PROXY: z.string().optional(),
 
-    // Tenancy & Row-Level Security
+    // Tenancy
     MULTI_TENANT: strictBoolean(false),
-    ENABLE_RLS: strictBoolean(false),
 
     // Seed credentials (initial owner setup)
     SEED_OWNER_USERNAME: z.string().default('owner'),
@@ -57,6 +61,14 @@ export const envSchema = z
     HUB_DEVICE_ID: z.string().default('hub-primary'),
     HUB_API_KEY: z.string().optional(),
     HUB_SYNC_INTERVAL_MS: z.coerce.number().default(5000),
+
+    // Database Pool Configuration
+    DB_POOL_MAX: z.coerce.number().int().min(1).max(100).default(10),
+    DB_IDLE_TIMEOUT_MS: z.coerce.number().int().min(1000).default(30000),
+    DB_CONNECTION_TIMEOUT_MS: z.coerce.number().int().min(1000).default(10000),
+    DB_STATEMENT_TIMEOUT_MS: z.coerce.number().int().min(1000).default(30000),
+    DB_IDLE_IN_TRANSACTION_TIMEOUT_MS: z.coerce.number().int().min(1000).default(15000),
+    DB_CA_CERT_PATH: z.string().optional(),
 
     // Observability
     METRICS_TOKEN: z.string().optional(),
@@ -129,6 +141,23 @@ export const envSchema = z
           path: ['CLOUD_SYNC_URL'],
           message: 'CLOUD_SYNC_URL is required when HUB_ROLE=local_hub in production.',
         });
+      } else {
+        try {
+          const u = new URL(config.CLOUD_SYNC_URL);
+          if (u.protocol !== 'https:') {
+            ctx.addIssue({
+              code: 'custom',
+              path: ['CLOUD_SYNC_URL'],
+              message: 'CLOUD_SYNC_URL must use https:// when HUB_ROLE=local_hub in production.',
+            });
+          }
+        } catch {
+          ctx.addIssue({
+            code: 'custom',
+            path: ['CLOUD_SYNC_URL'],
+            message: 'CLOUD_SYNC_URL must be a valid URL.',
+          });
+        }
       }
       if (!config.RESTAURANT_ID) {
         ctx.addIssue({
@@ -142,6 +171,50 @@ export const envSchema = z
           code: 'custom',
           path: ['HUB_API_KEY'],
           message: 'HUB_API_KEY is required when HUB_ROLE=local_hub in production.',
+        });
+      }
+    }
+
+    // Require verified TLS connections for production non-local Postgres databases
+    let isLocalDb = false;
+    try {
+      const dbUrl = new URL(config.DATABASE_URL);
+      const host = dbUrl.hostname.toLowerCase();
+      if (
+        host === 'localhost' ||
+        host === '127.0.0.1' ||
+        host === '::1' ||
+        host === 'host.docker.internal' ||
+        host === 'postgres' ||
+        host === 'hub-db'
+      ) {
+        isLocalDb = true;
+      }
+    } catch {
+      if (config.DATABASE_URL.startsWith('/')) {
+        isLocalDb = true;
+      }
+    }
+
+    if (!isLocalDb) {
+      const hasCaCert = Boolean(config.DB_CA_CERT_PATH && fs.existsSync(config.DB_CA_CERT_PATH));
+      let hasSslModeVerify = false;
+      try {
+        const dbUrl = new URL(config.DATABASE_URL);
+        const sslmode = dbUrl.searchParams.get('sslmode');
+        if (sslmode === 'verify-full' || sslmode === 'verify-ca') {
+          hasSslModeVerify = true;
+        }
+      } catch {
+        // ignore parse error
+      }
+
+      if (!hasCaCert && !hasSslModeVerify) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['DATABASE_URL'],
+          message:
+            'Production non-local PostgreSQL connections require verified TLS (provide valid DB_CA_CERT_PATH or sslmode=verify-full/verify-ca).',
         });
       }
     }

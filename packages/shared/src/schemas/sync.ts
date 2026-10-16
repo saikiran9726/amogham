@@ -55,9 +55,9 @@ export const paymentRecordCommandPayloadSchema = z.object({
 });
 
 export const syncOrderCreateCommandSchema = z.object({
-  id: z.string().min(1, 'Command ID required'),
-  idempotencyKey: z.string().min(1, 'Idempotency key required'),
-  deviceId: z.string().min(1, 'Device ID required'),
+  id: z.string().trim().min(1, 'Command ID required').max(128),
+  idempotencyKey: z.string().trim().min(1, 'Idempotency key required').max(128),
+  deviceId: z.string().trim().min(1, 'Device ID required').max(128),
   claimedAt: z.string().nullable().optional(),
   baseVersion: z.number().int().nonnegative().nullable().optional(),
   type: z.literal('order.create'),
@@ -65,9 +65,9 @@ export const syncOrderCreateCommandSchema = z.object({
 });
 
 export const syncKotStatusCommandSchema = z.object({
-  id: z.string().min(1, 'Command ID required'),
-  idempotencyKey: z.string().min(1, 'Idempotency key required'),
-  deviceId: z.string().min(1, 'Device ID required'),
+  id: z.string().trim().min(1, 'Command ID required').max(128),
+  idempotencyKey: z.string().trim().min(1, 'Idempotency key required').max(128),
+  deviceId: z.string().trim().min(1, 'Device ID required').max(128),
   claimedAt: z.string().nullable().optional(),
   baseVersion: z.number().int().nonnegative().nullable().optional(),
   type: z.literal('kot.status'),
@@ -75,9 +75,9 @@ export const syncKotStatusCommandSchema = z.object({
 });
 
 export const syncPaymentRecordCommandSchema = z.object({
-  id: z.string().min(1, 'Command ID required'),
-  idempotencyKey: z.string().min(1, 'Idempotency key required'),
-  deviceId: z.string().min(1, 'Device ID required'),
+  id: z.string().trim().min(1, 'Command ID required').max(128),
+  idempotencyKey: z.string().trim().min(1, 'Idempotency key required').max(128),
+  deviceId: z.string().trim().min(1, 'Device ID required').max(128),
   claimedAt: z.string().nullable().optional(),
   baseVersion: z.number().int().nonnegative().nullable().optional(),
   type: z.literal('payment.record'),
@@ -85,12 +85,12 @@ export const syncPaymentRecordCommandSchema = z.object({
 });
 
 export const syncUnknownCommandSchema = z.object({
-  id: z.string().min(1, 'Command ID required'),
-  idempotencyKey: z.string().min(1, 'Idempotency key required'),
-  deviceId: z.string().min(1, 'Device ID required'),
+  id: z.string().trim().min(1, 'Command ID required').max(128),
+  idempotencyKey: z.string().trim().min(1, 'Idempotency key required').max(128),
+  deviceId: z.string().trim().min(1, 'Device ID required').max(128),
   claimedAt: z.string().nullable().optional(),
   baseVersion: z.number().int().nonnegative().nullable().optional(),
-  type: z.string().min(1, 'Command type required'),
+  type: z.string().trim().min(1, 'Command type required').max(128),
   payload: z.record(z.string(), z.unknown()),
 });
 
@@ -105,8 +105,8 @@ export type SyncCommandBatchItemInput = z.infer<typeof syncCommandBatchItemSchem
 
 export const syncPushBatchSchema = z.object({
   restaurantId: z.string().uuid('Valid restaurant ID required').optional(),
-  deviceId: z.string().min(1, 'Device ID required'),
-  batchId: z.string().min(1, 'Batch ID required'),
+  deviceId: z.string().trim().min(1, 'Device ID required').max(128),
+  batchId: z.string().trim().min(1, 'Batch ID required').max(128),
   commands: z
     .array(syncCommandBatchItemSchema)
     .min(1, 'At least one command required')
@@ -121,10 +121,10 @@ export const syncPullQuerySchema = z.object({
 export type SyncPullQueryInput = z.infer<typeof syncPullQuerySchema>;
 
 export const registerHubSchema = z.object({
-  deviceId: z.string().min(1, 'Device ID required'),
-  name: z.string().min(1, 'Hub name required').default('Restaurant Local Hub'),
-  hostAddress: z.string().min(1, 'Host address required'),
-  apiKey: z.string().min(8, 'API key must be at least 8 chars'),
+  deviceId: z.string().trim().min(1, 'Device ID required').max(128),
+  name: z.string().trim().min(1, 'Hub name required').max(128).default('Restaurant Local Hub'),
+  hostAddress: z.string().trim().min(1, 'Host address required').max(128),
+  apiKey: z.string().trim().min(8, 'API key must be at least 8 chars').max(128).optional(),
 });
 export type RegisterHubInput = z.infer<typeof registerHubSchema>;
 

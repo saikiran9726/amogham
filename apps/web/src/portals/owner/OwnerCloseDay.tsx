@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { apiFetch } from '../../stores/useAuthStore.js';
 import { useToastStore } from '../../stores/useToastStore.js';
+import { useSocketFallbackPollInterval } from '../../utils/polling.js';
 import { Button } from '../../components/ui/Button.js';
 import { CashCountForm } from '../../components/CashCountForm.js';
 import { MismatchBanner } from '../../components/MismatchBanner.js';
@@ -60,6 +61,7 @@ export const OwnerCloseDay: React.FC = () => {
   const [reopenReason, setReopenReason] = useState('');
 
   // Queries
+  const fallbackPollInterval = useSocketFallbackPollInterval();
   const {
     data: statusData,
     isLoading: isStatusLoading,
@@ -67,7 +69,7 @@ export const OwnerCloseDay: React.FC = () => {
   } = useQuery<EodPreCheckStatus>({
     queryKey: ['eod-status', targetDate],
     queryFn: () => apiFetch(`/day/status?businessDate=${targetDate}`),
-    refetchInterval: 10000,
+    refetchInterval: fallbackPollInterval,
   });
 
   const { data: summariesHistory, isLoading: isHistoryLoading } = useQuery<{

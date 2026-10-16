@@ -1,0 +1,57 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Production builds
+dist/
+build/
+.output/
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+*.log
+
+# Environment variables
+.env
+.env.*
+.env.backup*
+!.env.example
+
+# Backups
+*.backup
+*.backup*
+
+# Testing
+coverage/
+playwright-report/
+test-results/
+.nyc_output/
+test-output.txt
+
+# Stray scripts
+.acceptance-run*
+*check-db*
+
+# IDE / Editor
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Turborepo / Cache
+.turbo/
+
+# TypeScript build cache
+*.tsbuildinfo

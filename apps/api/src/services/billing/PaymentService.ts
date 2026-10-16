@@ -468,11 +468,7 @@ export class PaymentService {
         .reduce((sum, p) => sum + p.amountPaise, 0);
 
       const isFullyPaid = confirmedPaise >= bill.totalPaise;
-      const newStatus = isFullyPaid
-        ? 'paid'
-        : confirmedPaise > 0
-          ? 'partially_paid'
-          : bill.status;
+      const newStatus = isFullyPaid ? 'paid' : confirmedPaise > 0 ? 'partially_paid' : bill.status;
 
       const [updatedBill] = await tx
         .update(bills)
@@ -626,10 +622,7 @@ export class PaymentService {
       throw AppError.badRequest('UPI VPA not configured for this restaurant');
     }
 
-    const billPayments = await executor
-      .select()
-      .from(payments)
-      .where(eq(payments.billId, billId));
+    const billPayments = await executor.select().from(payments).where(eq(payments.billId, billId));
 
     const confirmedPaid = billPayments
       .filter((p) => p.status === 'confirmed')

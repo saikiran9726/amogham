@@ -2,7 +2,7 @@ import type { HealthResponse, VersionResponse } from '@restaurant-os/shared';
 import { useAuthStore, requestExclusiveRefresh } from '../stores/useAuthStore.js';
 import { useConnectionStore } from '../stores/useConnectionStore.js';
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:4000';
+import { API_BASE_URL } from '../config/api-base.js';
 const DEFAULT_TIMEOUT_MS = 15000;
 const MAX_IDEMPOTENT_RETRIES = 2;
 const BASE_RETRY_DELAY_MS = 300;
@@ -82,9 +82,13 @@ export async function apiFetch<T = unknown>(
       if (options.signal.aborted) {
         throw options.signal.reason ?? new Error('Request aborted');
       }
-      options.signal.addEventListener('abort', () => abortController.abort(options.signal?.reason), {
-        once: true,
-      });
+      options.signal.addEventListener(
+        'abort',
+        () => abortController.abort(options.signal?.reason),
+        {
+          once: true,
+        },
+      );
     }
 
     // Set 15s timeout
@@ -196,11 +200,11 @@ export async function apiFetch<T = unknown>(
 
 export async function fetchHealth(): Promise<{ data: HealthResponse; latencyMs: number }> {
   const start = performance.now();
-  const data = await apiFetch<HealthResponse>(`${API_BASE}/health`, { retryIdempotent: false });
+  const data = await apiFetch<HealthResponse>(`${API_BASE_URL}/health`, { retryIdempotent: false });
   const latencyMs = Math.round(performance.now() - start);
   return { data, latencyMs };
 }
 
 export async function fetchVersion(): Promise<VersionResponse> {
-  return await apiFetch<VersionResponse>(`${API_BASE}/version`, { retryIdempotent: false });
+  return await apiFetch<VersionResponse>(`${API_BASE_URL}/version`, { retryIdempotent: false });
 }

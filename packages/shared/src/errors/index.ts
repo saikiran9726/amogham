@@ -77,4 +77,11 @@ export class AppError extends Error {
   ): AppError {
     return new AppError(message, ErrorCodes.RATE_LIMIT_EXCEEDED, 429, details);
   }
+
+  static serviceUnavailable(
+    message = 'Service temporarily unavailable. Please retry shortly.',
+    details?: unknown,
+  ): AppError {
+    return new AppError(message, ErrorCodes.SERVICE_UNAVAILABLE, 503, details);
+  }
 }

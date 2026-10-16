@@ -1,5 +1,10 @@
 import Dexie, { type Table } from 'dexie';
-import type { MenuCategory, MenuItem, TableModel, CustomerWaiterSummary } from '@restaurant-os/shared';
+import type {
+  MenuCategory,
+  MenuItem,
+  TableModel,
+  CustomerWaiterSummary,
+} from '@restaurant-os/shared';
 
 export interface OutboxCommand {
   id: string; // client uuid
@@ -147,7 +152,9 @@ export const localDb = new RestaurantDatabase();
  * - On logout: clears all cached customer PII, customer details in open orders, and receiptData in print jobs.
  * - On retention cleanup (N days old, default 7 days): purges records older than cutoffMs.
  */
-export async function purgeCustomerPiiAndReceipts(options: { daysOld?: number; purgeAll?: boolean } = {}): Promise<{
+export async function purgeCustomerPiiAndReceipts(
+  options: { daysOld?: number; purgeAll?: boolean } = {},
+): Promise<{
   purgedCustomers: number;
   clearedOrders: number;
   clearedPrintJobs: number;
@@ -155,57 +162,63 @@ export async function purgeCustomerPiiAndReceipts(options: { daysOld?: number; p
   const { daysOld = 7, purgeAll = false } = options;
   const cutoffMs = Date.now() - daysOld * 24 * 60 * 60 * 1000;
 
-  return await localDb.transaction('rw', [localDb.cachedCustomers, localDb.openOrders, localDb.printJobs], async () => {
-    let purgedCustomers = 0;
-    if (purgeAll) {
-      purgedCustomers = await localDb.cachedCustomers.count();
-      await localDb.cachedCustomers.clear();
-    } else {
-      const oldCustomers = await localDb.cachedCustomers
-        .filter((c) => c.updatedAt < cutoffMs)
+  return await localDb.transaction(
+    'rw',
+    [localDb.cachedCustomers, localDb.openOrders, localDb.printJobs],
+    async () => {
+      let purgedCustomers = 0;
+      if (purgeAll) {
+        purgedCustomers = await localDb.cachedCustomers.count();
+        await localDb.cachedCustomers.clear();
+      } else {
+        const oldCustomers = await localDb.cachedCustomers
+          .filter((c) => c.updatedAt < cutoffMs)
+          .toArray();
+        purgedCustomers = oldCustomers.length;
+        await localDb.cachedCustomers.bulkDelete(oldCustomers.map((c) => c.id));
+      }
+
+      // Strip PII from local orders (anonymize customer info)
+      const ordersToAnonymize = await localDb.openOrders
+        .filter((o) => {
+          if (purgeAll) {
+            return Boolean(o.customerPhone || o.customerName || o.customerPreferences);
+          }
+          return (
+            o.updatedAt < cutoffMs &&
+            Boolean(o.customerPhone || o.customerName || o.customerPreferences)
+          );
+        })
         .toArray();
-      purgedCustomers = oldCustomers.length;
-      await localDb.cachedCustomers.bulkDelete(oldCustomers.map((c) => c.id));
-    }
 
-    // Strip PII from local orders (anonymize customer info)
-    const ordersToAnonymize = await localDb.openOrders
-      .filter((o) => {
-        if (purgeAll) {
-          return Boolean(o.customerPhone || o.customerName || o.customerPreferences);
-        }
-        return o.updatedAt < cutoffMs && Boolean(o.customerPhone || o.customerName || o.customerPreferences);
-      })
-      .toArray();
+      for (const order of ordersToAnonymize) {
+        await localDb.openOrders.update(order.id, {
+          customerPhone: null,
+          customerName: null,
+          customerPreferences: null,
+        });
+      }
 
-    for (const order of ordersToAnonymize) {
-      await localDb.openOrders.update(order.id, {
-        customerPhone: null,
-        customerName: null,
-        customerPreferences: null,
-      });
-    }
+      // Strip receipt payloads from printJobs
+      const jobsToScrub = await localDb.printJobs
+        .filter((job) => {
+          if (!job.receiptData) return false;
+          if (purgeAll) return true;
+          return job.createdAt < cutoffMs;
+        })
+        .toArray();
 
-    // Strip receipt payloads from printJobs
-    const jobsToScrub = await localDb.printJobs
-      .filter((job) => {
-        if (!job.receiptData) return false;
-        if (purgeAll) return true;
-        return job.createdAt < cutoffMs;
-      })
-      .toArray();
+      for (const job of jobsToScrub) {
+        await localDb.printJobs.update(job.id, {
+          receiptData: undefined,
+        });
+      }
 
-    for (const job of jobsToScrub) {
-      await localDb.printJobs.update(job.id, {
-        receiptData: undefined,
-      });
-    }
-
-    return {
-      purgedCustomers,
-      clearedOrders: ordersToAnonymize.length,
-      clearedPrintJobs: jobsToScrub.length,
-    };
-  });
+      return {
+        purgedCustomers,
+        clearedOrders: ordersToAnonymize.length,
+        clearedPrintJobs: jobsToScrub.length,
+      };
+    },
+  );
 }
-

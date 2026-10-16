@@ -1,9 +1,6 @@
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { eq } from 'drizzle-orm';
-import {
-  Permissions,
-  redeemPointsSchema,
-} from '@restaurant-os/shared';
+import { Permissions, redeemPointsSchema } from '@restaurant-os/shared';
 import { requirePermission } from '../../auth/middleware.js';
 import { extractIdempotencyKey, withIdempotency } from '../../http/idempotency.js';
 import { LoyaltyRedemptionService } from '../../services/billing/LoyaltyRedemptionService.js';

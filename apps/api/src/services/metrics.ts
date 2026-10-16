@@ -58,7 +58,7 @@ export class MetricsService {
     httpRequestDurationHistogram.observe(
       {
         method: method.toUpperCase(),
-        route: route || 'unknown',
+        route: route || 'unmatched',
         status_code: String(statusCode),
       },
       durationSeconds,
@@ -85,8 +85,21 @@ export class MetricsService {
     hubPullCounter.inc({ restaurant_id: restaurantId, status });
   }
 
-  static async getMetrics(): Promise<string> {
-    return register.metrics();
+  static async getMetrics(restaurantId?: string): Promise<string> {
+    const raw = await register.metrics();
+    if (!restaurantId) return raw;
+
+    // Restrict multi-tenant data access: omit metric lines that belong to other restaurants
+    return raw
+      .split('\n')
+      .filter((line) => {
+        const match = line.match(/restaurant_id="([^"]+)"/);
+        if (match && match[1] !== restaurantId) {
+          return false;
+        }
+        return true;
+      })
+      .join('\n');
   }
 
   static getContentType(): string {

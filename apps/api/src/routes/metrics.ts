@@ -1,8 +1,19 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
+import crypto from 'node:crypto';
 import { MetricsService } from '../services/metrics.js';
 import { env } from '../config/env.js';
 import { authenticate, registerRouteGuard } from '../auth/middleware.js';
 import { Permissions, Roles, AppError } from '@restaurant-os/shared';
+
+function constantTimeTokenCompare(
+  incoming: string | undefined | null,
+  expected: string | undefined | null,
+): boolean {
+  if (!incoming || !expected) return false;
+  const hashA = crypto.createHash('sha256').update(incoming).digest();
+  const hashB = crypto.createHash('sha256').update(expected).digest();
+  return crypto.timingSafeEqual(hashA, hashB);
+}
 
 export async function metricsRoutes(app: FastifyInstance): Promise<void> {
   registerRouteGuard({
@@ -13,16 +24,20 @@ export async function metricsRoutes(app: FastifyInstance): Promise<void> {
   });
 
   app.get('/metrics', async (request: FastifyRequest, reply: FastifyReply) => {
-    // 1. Check machine token if configured
-    const metricsHeader = request.headers['x-metrics-token'];
+    // 1. Check machine token if configured via constant-time comparison
+    const metricsHeader = request.headers['x-metrics-token'] as string | undefined;
     const authHeader = request.headers.authorization;
     const bearerToken = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : null;
 
-    if (
-      env.METRICS_TOKEN &&
-      (metricsHeader === env.METRICS_TOKEN || bearerToken === env.METRICS_TOKEN)
-    ) {
-      const data = await MetricsService.getMetrics();
+    const isMachineTokenValid =
+      Boolean(env.METRICS_TOKEN) &&
+      (constantTimeTokenCompare(metricsHeader, env.METRICS_TOKEN) ||
+        constantTimeTokenCompare(bearerToken, env.METRICS_TOKEN));
+
+    if (isMachineTokenValid) {
+      // Machine scraper has cluster-wide view (or optional query filter if specified)
+      const requestedRestaurantId = (request.query as { restaurant_id?: string })?.restaurant_id;
+      const data = await MetricsService.getMetrics(requestedRestaurantId);
       return reply.type(MetricsService.getContentType()).send(data);
     }
 
@@ -43,7 +58,20 @@ export async function metricsRoutes(app: FastifyInstance): Promise<void> {
         throw AppError.forbidden('Forbidden: Missing permissions to access metrics');
       }
 
-      const data = await MetricsService.getMetrics();
+      // Restrict multi-tenant data access: ensure caller only accesses metrics for their restaurant
+      const requestedRestaurantId = (request.headers['x-restaurant-id'] ||
+        (request.query as { restaurant_id?: string })?.restaurant_id) as string | undefined;
+
+      if (
+        requestedRestaurantId &&
+        user.restaurantId &&
+        requestedRestaurantId !== user.restaurantId
+      ) {
+        throw AppError.forbidden('Forbidden: Cross-tenant metrics access denied');
+      }
+
+      const tenantRestaurantId = user.restaurantId;
+      const data = await MetricsService.getMetrics(tenantRestaurantId);
       return reply.type(MetricsService.getContentType()).send(data);
     } catch (err) {
       if (err instanceof AppError) throw err;

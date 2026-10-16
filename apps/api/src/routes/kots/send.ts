@@ -1,11 +1,6 @@
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { eq, and, inArray } from 'drizzle-orm';
-import {
-  Permissions,
-  AppError,
-  sendKotInputSchema,
-  Roles,
-} from '@restaurant-os/shared';
+import { Permissions, AppError, sendKotInputSchema, Roles } from '@restaurant-os/shared';
 import { forTenant } from '../../db/tenant.js';
 import { orders, orderItems } from '../../db/schema/orders.js';
 import { kots, kotItems } from '../../db/schema/kots.js';
@@ -14,7 +9,11 @@ import { menuItems } from '../../db/schema/menu-items.js';
 import { requirePermission, registerRouteGuard } from '../../auth/middleware.js';
 import { recordAuditLog } from '../../services/audit.js';
 import { emitRealtimeEvent } from '../../realtime/socket.js';
-import { verifyApproverPin } from '../../auth/approval.js';
+import {
+  authorizeApprover,
+  recordApprovalUse,
+  type ApproverVerificationResult,
+} from '../../auth/approval.js';
 import { allocateKotNumber, syncOrderAndTableStatus } from './helpers.js';
 
 export async function registerKotSendRoutes(app: FastifyInstance): Promise<void> {
@@ -50,6 +49,26 @@ export async function registerKotSendRoutes(app: FastifyInstance): Promise<void>
         );
       }
       const { provisionalLabel, cancelledItems = [] } = bodyParse.data;
+
+      // Pre-authorize any cancelled item approvers outside the transaction
+      const preAuthorizedCancelled = new Map<string, ApproverVerificationResult>();
+      for (const cancelledReq of cancelledItems) {
+        const pin = cancelledReq.pin ?? cancelledReq.managerPin;
+        if (pin && cancelledReq.approverUserId) {
+          const approver = await authorizeApprover(tenant.db, {
+            restaurantId: authUser.restaurantId,
+            approverUserId: cancelledReq.approverUserId,
+            pin,
+            allowedRoles: [Roles.OWNER, Roles.MANAGER],
+            reason: cancelledReq.reason,
+            entity: 'kot_item',
+            entityId: cancelledReq.orderItemId,
+            actorUserId: authUser.userId,
+            request,
+          });
+          preAuthorizedCancelled.set(cancelledReq.orderItemId, approver);
+        }
+      }
 
       // Diff engine execution inside single DB transaction with idempotency
       const { result: responsePayload, replayed } = await tenant.withTx(async (_tenantTx, tx) => {
@@ -187,15 +206,27 @@ export async function registerKotSendRoutes(app: FastifyInstance): Promise<void>
                   );
                 }
 
-                await verifyApproverPin(trx, {
+                const approver =
+                  preAuthorizedCancelled.get(cancelledReq.orderItemId) ??
+                  (await authorizeApprover(tenant.db, {
+                    restaurantId: authUser.restaurantId,
+                    approverUserId: cancelledReq.approverUserId,
+                    pin,
+                    allowedRoles: [Roles.OWNER, Roles.MANAGER],
+                    reason: cancelledReq.reason,
+                    entity: 'kot_item',
+                    entityId: cancelledReq.orderItemId,
+                    actorUserId: authUser.userId,
+                    request,
+                  }));
+
+                await recordApprovalUse(trx, {
                   restaurantId: authUser.restaurantId,
-                  approverUserId: cancelledReq.approverUserId,
-                  pin,
-                  allowedRoles: [Roles.OWNER, Roles.MANAGER],
-                  reason: cancelledReq.reason,
+                  approver,
                   entity: 'kot_item',
                   entityId: cancelledReq.orderItemId,
                   actorUserId: authUser.userId,
+                  reason: cancelledReq.reason,
                   request,
                 });
               }

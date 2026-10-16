@@ -281,6 +281,8 @@ export interface CsvImportPreviewResponse {
 
 export const commitCsvImportSchema = z.object({
   dryRun: z.boolean().default(false),
-  csvContent: z.string().min(1, 'CSV content cannot be empty').max(2_000_000, 'CSV content exceeds maximum limit of 2MB'),
+  csvContent: z
+    .string()
+    .min(1, 'CSV content cannot be empty')
+    .max(2_000_000, 'CSV content exceeds maximum limit of 2MB'),
 });
-

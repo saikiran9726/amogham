@@ -30,17 +30,20 @@ interface KotHistoryEntry {
   [key: string]: unknown;
 }
 
+import { useSocketFallbackPollInterval } from '../utils/polling.js';
+
 export const KotHistorySheet: React.FC<KotHistorySheetProps> = ({
   isOpen,
   orderId,
   tableLabel,
   onClose,
 }) => {
+  const fallbackPollInterval = useSocketFallbackPollInterval();
   const { data: kotsData, isLoading } = useQuery<{ kots: KotHistoryEntry[] }>({
     queryKey: ['order-kots', orderId],
     queryFn: () => apiFetch(`/kots?orderId=${orderId}`),
     enabled: isOpen && Boolean(orderId),
-    refetchInterval: 5000,
+    refetchInterval: fallbackPollInterval,
   });
 
   const kots = kotsData?.kots || [];

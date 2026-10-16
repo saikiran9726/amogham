@@ -1,11 +1,8 @@
 import type { FastifyInstance } from 'fastify';
 import { eq, and, sql } from 'drizzle-orm';
 import { invalidateUserSessionCache } from '../../auth/token-cache.js';
-import {
-  Permissions,
-  AppError,
-  staffResetCredentialSchema,
-} from '@restaurant-os/shared';
+import { disconnectUserSockets } from '../../realtime/socket.js';
+import { Permissions, AppError, staffResetCredentialSchema } from '@restaurant-os/shared';
 import { forTenant } from '../../db/tenant.js';
 import { users } from '../../db/schema/users.js';
 import { roles } from '../../db/schema/roles.js';
@@ -93,6 +90,7 @@ export async function registerStaffResetCredentialRoutes(app: FastifyInstance): 
         .where(eq(users.id, targetUser.id));
 
       invalidateUserSessionCache(authUser.restaurantId, targetUser.id);
+      disconnectUserSockets(targetUser.id, 'Credentials reset');
 
       await recordAuditLog({
         restaurantId: authUser.restaurantId,

@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { apiFetch } from '../../stores/useAuthStore.js';
 import { useToastStore } from '../../stores/useToastStore.js';
+import { useSocketFallbackPollInterval } from '../../utils/polling.js';
 import { Button } from '../../components/ui/Button.js';
 import { KpiCard } from '../../components/ui/Cards.js';
 import { RangePicker, type RangePreset } from '../../components/RangePicker.js';
@@ -71,6 +72,7 @@ export const OwnerSales: React.FC = () => {
   const { start: effectiveStart, end: effectiveEnd } = getEffectiveDates();
 
   // Queries
+  const fallbackPollInterval = useSocketFallbackPollInterval();
   const {
     data: salesData,
     isLoading: isSalesLoading,
@@ -81,7 +83,7 @@ export const OwnerSales: React.FC = () => {
       apiFetch(
         `/reports/sales?range=${preset}&startDate=${effectiveStart}&endDate=${effectiveEnd}`,
       ),
-    refetchInterval: 30000,
+    refetchInterval: fallbackPollInterval,
   });
 
   const { data: itemsData } = useQuery<ItemsReportResponse>({

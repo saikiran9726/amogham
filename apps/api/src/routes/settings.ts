@@ -1,10 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import { eq } from 'drizzle-orm';
-import {
-  Permissions,
-  updateRestaurantSettingsSchema,
-  generateUuidV7,
-} from '@restaurant-os/shared';
+import { Permissions, updateRestaurantSettingsSchema, generateUuidV7 } from '@restaurant-os/shared';
 import { forTenant } from '../db/tenant.js';
 import { restaurantSettings } from '../db/schema/restaurant-settings.js';
 import { restaurants } from '../db/schema/restaurants.js';

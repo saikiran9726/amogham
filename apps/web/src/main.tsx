@@ -1,6 +1,7 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { registerSocketQueryClient } from './stores/useSocketStore.js';
 import App from './App.js';
 import './index.css';
 
@@ -12,6 +13,8 @@ const queryClient = new QueryClient({
     },
   },
 });
+
+registerSocketQueryClient(queryClient);
 
 // Register service worker stub (Workbox PWA app shell)
 if ('serviceWorker' in navigator && import.meta.env.PROD) {

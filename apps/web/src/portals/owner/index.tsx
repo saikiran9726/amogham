@@ -11,25 +11,59 @@ import { Permissions } from '@restaurant-os/shared';
 const OwnerHome = lazy(() => import('./OwnerHome.js').then((m) => ({ default: m.OwnerHome })));
 const OwnerStaff = lazy(() => import('./OwnerStaff.js').then((m) => ({ default: m.OwnerStaff })));
 const OwnerAudit = lazy(() => import('./OwnerAudit.js').then((m) => ({ default: m.OwnerAudit })));
-const OwnerPaymentsView = lazy(() => import('./OwnerPaymentsView.js').then((m) => ({ default: m.OwnerPaymentsView })));
-const OwnerCustomers = lazy(() => import('./OwnerCustomers.js').then((m) => ({ default: m.OwnerCustomers })));
-const OwnerLoyalty = lazy(() => import('./OwnerLoyalty.js').then((m) => ({ default: m.OwnerLoyalty })));
+const OwnerPaymentsView = lazy(() =>
+  import('./OwnerPaymentsView.js').then((m) => ({ default: m.OwnerPaymentsView })),
+);
+const OwnerCustomers = lazy(() =>
+  import('./OwnerCustomers.js').then((m) => ({ default: m.OwnerCustomers })),
+);
+const OwnerLoyalty = lazy(() =>
+  import('./OwnerLoyalty.js').then((m) => ({ default: m.OwnerLoyalty })),
+);
 const OwnerSales = lazy(() => import('./OwnerSales.js').then((m) => ({ default: m.OwnerSales })));
-const OwnerCloseDay = lazy(() => import('./OwnerCloseDay.js').then((m) => ({ default: m.OwnerCloseDay })));
-const OwnerInventory = lazy(() => import('./OwnerInventory.js').then((m) => ({ default: m.OwnerInventory })));
-const OwnerPurchases = lazy(() => import('./OwnerPurchases.js').then((m) => ({ default: m.OwnerPurchases })));
-const OwnerExpenses = lazy(() => import('./OwnerExpenses.js').then((m) => ({ default: m.OwnerExpenses })));
-const OwnerMonthReview = lazy(() => import('./OwnerMonthReview.js').then((m) => ({ default: m.OwnerMonthReview })));
-const OwnerHealth = lazy(() => import('./OwnerHealth.js').then((m) => ({ default: m.OwnerHealth })));
-const OwnerHealthSettings = lazy(() => import('./OwnerHealthSettings.js').then((m) => ({ default: m.OwnerHealthSettings })));
-const OwnerAlerts = lazy(() => import('./OwnerAlerts.js').then((m) => ({ default: m.OwnerAlerts })));
-const OwnerInsights = lazy(() => import('./OwnerInsights.js').then((m) => ({ default: m.OwnerInsights })));
-const OwnerAlertSettings = lazy(() => import('./OwnerAlertSettings.js').then((m) => ({ default: m.OwnerAlertSettings })));
-const OwnerHubSetup = lazy(() => import('./OwnerHubSetup.js').then((m) => ({ default: m.OwnerHubSetup })));
-const OwnerSyncProblems = lazy(() => import('./OwnerSyncProblems.js').then((m) => ({ default: m.OwnerSyncProblems })));
-const BillHistoryView = lazy(() => import('../../components/BillHistoryView.js').then((m) => ({ default: m.BillHistoryView })));
+const OwnerCloseDay = lazy(() =>
+  import('./OwnerCloseDay.js').then((m) => ({ default: m.OwnerCloseDay })),
+);
+const OwnerInventory = lazy(() =>
+  import('./OwnerInventory.js').then((m) => ({ default: m.OwnerInventory })),
+);
+const OwnerPurchases = lazy(() =>
+  import('./OwnerPurchases.js').then((m) => ({ default: m.OwnerPurchases })),
+);
+const OwnerExpenses = lazy(() =>
+  import('./OwnerExpenses.js').then((m) => ({ default: m.OwnerExpenses })),
+);
+const OwnerMonthReview = lazy(() =>
+  import('./OwnerMonthReview.js').then((m) => ({ default: m.OwnerMonthReview })),
+);
+const OwnerHealth = lazy(() =>
+  import('./OwnerHealth.js').then((m) => ({ default: m.OwnerHealth })),
+);
+const OwnerHealthSettings = lazy(() =>
+  import('./OwnerHealthSettings.js').then((m) => ({ default: m.OwnerHealthSettings })),
+);
+const OwnerAlerts = lazy(() =>
+  import('./OwnerAlerts.js').then((m) => ({ default: m.OwnerAlerts })),
+);
+const OwnerInsights = lazy(() =>
+  import('./OwnerInsights.js').then((m) => ({ default: m.OwnerInsights })),
+);
+const OwnerAlertSettings = lazy(() =>
+  import('./OwnerAlertSettings.js').then((m) => ({ default: m.OwnerAlertSettings })),
+);
+const OwnerHubSetup = lazy(() =>
+  import('./OwnerHubSetup.js').then((m) => ({ default: m.OwnerHubSetup })),
+);
+const OwnerSyncProblems = lazy(() =>
+  import('./OwnerSyncProblems.js').then((m) => ({ default: m.OwnerSyncProblems })),
+);
+const BillHistoryView = lazy(() =>
+  import('../../components/BillHistoryView.js').then((m) => ({ default: m.BillHistoryView })),
+);
 const OwnerMenu = lazy(() => import('./OwnerMenu.js').then((m) => ({ default: m.OwnerMenu })));
-const OwnerTables = lazy(() => import('./OwnerTables.js').then((m) => ({ default: m.OwnerTables })));
+const OwnerTables = lazy(() =>
+  import('./OwnerTables.js').then((m) => ({ default: m.OwnerTables })),
+);
 
 const OwnerLoadingFallback: React.FC = () => (
   <div className="p-6 space-y-4 max-w-7xl mx-auto animate-pulse">

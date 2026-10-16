@@ -84,9 +84,10 @@ export function serializeKitchenState(rawKots: RawKitchenKotInput[]): KitchenSta
         action: i.action,
         status: i.status,
         noteSnapshot: i.noteSnapshot || null,
-        modifiers: (Array.isArray(i.modifiers) ? (i.modifiers as Array<{ name?: unknown }>) : []).map(
-          (m) => ({ name: typeof m?.name === 'string' ? m.name : String(m?.name ?? '') })
-        ),
+        modifiers: (Array.isArray(i.modifiers)
+          ? (i.modifiers as Array<{ name?: unknown }>)
+          : []
+        ).map((m) => ({ name: typeof m?.name === 'string' ? m.name : String(m?.name ?? '') })),
         doneAt: i.doneAt
           ? typeof i.doneAt === 'string'
             ? i.doneAt

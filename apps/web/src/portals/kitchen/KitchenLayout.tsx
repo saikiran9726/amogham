@@ -18,6 +18,7 @@ import { useKitchenStore, type TextSize } from '../../stores/useKitchenStore.js'
 import { useConnectionStore } from '../../stores/useConnectionStore.js';
 import { apiFetch } from '../../stores/useAuthStore.js';
 import { ConnectionBanner } from '../../components/ConnectionBanner.js';
+import { useSocketFallbackPollInterval } from '../../utils/polling.js';
 
 export const KitchenLayout: React.FC = () => {
   const {
@@ -77,10 +78,11 @@ export const KitchenLayout: React.FC = () => {
   };
 
   // Fetch count of currently 86'd (out-of-stock) items for header badge
+  const fallbackPollInterval = useSocketFallbackPollInterval();
   const { data: menuData } = useQuery<{ items: Array<{ available: boolean }> }>({
     queryKey: ['kitchen-menu-oos-count'],
     queryFn: () => apiFetch('/menu'),
-    refetchInterval: 30000,
+    refetchInterval: fallbackPollInterval,
   });
 
   const oosCount = (menuData?.items || []).filter((i) => !i.available).length;

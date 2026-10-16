@@ -2,6 +2,7 @@ import React from 'react';
 import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { fetchHealth, fetchVersion } from '../api/client.js';
+import { useSocketFallbackPollInterval } from '../utils/polling.js';
 import { useAppStore } from '../stores/useAppStore.js';
 import { Button } from '../components/ui/Button.js';
 import {
@@ -20,6 +21,7 @@ import { useThemeStore } from '../stores/useThemeStore.js';
 export const BootHub: React.FC = () => {
   const { setLastBootCheck } = useAppStore();
   const { resolvedTheme, toggleTheme } = useThemeStore();
+  const fallbackPollInterval = useSocketFallbackPollInterval();
 
   const {
     data: healthData,
@@ -35,7 +37,7 @@ export const BootHub: React.FC = () => {
       setLastBootCheck(res.data.timestamp);
       return res;
     },
-    refetchInterval: 15000,
+    refetchInterval: fallbackPollInterval,
   });
 
   const { data: versionData } = useQuery({

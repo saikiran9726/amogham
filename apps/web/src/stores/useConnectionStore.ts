@@ -19,11 +19,22 @@ interface ConnectionState {
   getBaseUrl: () => string;
 }
 
-const DEFAULT_CLOUD_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:4000';
+import { API_BASE_URL, validateHubAddress } from '../config/api-base.js';
+
+const DEFAULT_CLOUD_URL = API_BASE_URL;
 
 export const useConnectionStore = create<ConnectionState>((set, get) => {
-  const savedHub =
+  let savedHub =
     typeof window !== 'undefined' ? localStorage.getItem('restaurant_hub_address') : null;
+  if (savedHub) {
+    const check = validateHubAddress(savedHub);
+    if (!check.valid) {
+      if (typeof window !== 'undefined') localStorage.removeItem('restaurant_hub_address');
+      savedHub = null;
+    } else if (check.normalizedUrl) {
+      savedHub = check.normalizedUrl;
+    }
+  }
 
   return {
     activeConnection: navigator.onLine ? 'cloud' : 'offline',
@@ -38,11 +49,21 @@ export const useConnectionStore = create<ConnectionState>((set, get) => {
 
     setHubAddress: (address) => {
       if (address) {
-        localStorage.setItem('restaurant_hub_address', address);
+        const validation = validateHubAddress(address);
+        if (!validation.valid) {
+          throw new Error(validation.error || 'Invalid hub address');
+        }
+        const normalized = validation.normalizedUrl || address;
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('restaurant_hub_address', normalized);
+        }
+        set({ hubAddress: normalized });
       } else {
-        localStorage.removeItem('restaurant_hub_address');
+        if (typeof window !== 'undefined') {
+          localStorage.removeItem('restaurant_hub_address');
+        }
+        set({ hubAddress: null });
       }
-      set({ hubAddress: address });
       void get().probeConnection();
     },
 

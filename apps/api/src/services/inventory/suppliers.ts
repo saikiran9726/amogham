@@ -1,11 +1,7 @@
 import { eq, and, sql, asc } from 'drizzle-orm';
 import { db } from '../../db/client.js';
 import { suppliers, purchases } from '../../db/schema/index.js';
-import {
-  type CreateSupplierInput,
-  type SupplierOutput,
-  AppError,
-} from '@restaurant-os/shared';
+import { type CreateSupplierInput, type SupplierOutput, AppError } from '@restaurant-os/shared';
 
 export class InventorySupplierService {
   static async listSuppliers(restaurantId: string): Promise<SupplierOutput[]> {

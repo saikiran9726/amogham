@@ -1,8 +1,5 @@
 import type { FastifyInstance, FastifyRequest } from 'fastify';
-import {
-  Permissions,
-  RecordPaymentSchema,
-} from '@restaurant-os/shared';
+import { Permissions, RecordPaymentSchema } from '@restaurant-os/shared';
 import { requirePermission } from '../../auth/middleware.js';
 import { extractIdempotencyKey } from '../../http/idempotency.js';
 import { PaymentService } from '../../services/billing/PaymentService.js';

@@ -10,8 +10,9 @@ import { SyncEngineService } from '../src/services/sync-engine.js';
 const expectedDatabase = process.env.RESTAURANT_OS_ISOLATED_TEST_DB;
 const isDedicatedTestDatabase =
   Boolean(expectedDatabase) &&
-  (new URL(process.env.DATABASE_URL || 'postgres://localhost/').pathname === `/${expectedDatabase}` ||
-   process.env.DATABASE_URL?.includes(expectedDatabase));
+  (new URL(process.env.DATABASE_URL || 'postgres://localhost/').pathname ===
+    `/${expectedDatabase}` ||
+    process.env.DATABASE_URL?.includes(expectedDatabase));
 
 describe.skipIf(!isDedicatedTestDatabase)('isolated PostgreSQL workflow integration', () => {
   const restaurantId = randomUUID();
@@ -107,7 +108,10 @@ describe.skipIf(!isDedicatedTestDatabase)('isolated PostgreSQL workflow integrat
               inet_server_port() AS port, current_setting('server_version_num') AS version_num`,
     );
     const actual = identity.rows[0];
-    if (actual.database !== expectedDatabase && !process.env.DATABASE_URL?.includes(actual.database)) {
+    if (
+      actual.database !== expectedDatabase &&
+      !process.env.DATABASE_URL?.includes(actual.database)
+    ) {
       throw new Error(
         `Refusing workflow tests because connected database (${actual.database}) did not match expected (${expectedDatabase}).`,
       );

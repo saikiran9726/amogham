@@ -5,6 +5,7 @@ export interface RealtimeEvent<T = unknown> {
   event: string;
   data: T;
   timestamp: number;
+  target?: RealtimeTarget;
 }
 
 export type RealtimeTarget = 'all' | 'kitchen' | 'floor' | 'owner';
@@ -30,7 +31,11 @@ export interface RealtimeBus {
   publish<T = unknown>(
     payload: RealtimePublishPayload<T>,
   ): Promise<RealtimeEvent<T>> | RealtimeEvent<T>;
-  getHistory(restaurantId: string, since: number): Promise<RealtimeEvent[]> | RealtimeEvent[];
+  getHistory(
+    restaurantId: string,
+    since: number,
+    roleOrTargets?: string | readonly RealtimeTarget[],
+  ): Promise<RealtimeEvent[]> | RealtimeEvent[];
   subscribe(subscriber: RealtimeSubscriber): () => void;
   sweep(): void;
   destroy(): void;
@@ -64,6 +69,7 @@ export class InMemoryRealtimeBus implements RealtimeBus {
       event,
       data,
       timestamp: Date.now(),
+      target,
     };
 
     let history = this.eventLog.get(restaurantId);
@@ -88,12 +94,50 @@ export class InMemoryRealtimeBus implements RealtimeBus {
     return eventPayload;
   }
 
-  getHistory(restaurantId: string, since: number): RealtimeEvent[] {
+  getHistory(
+    restaurantId: string,
+    since: number,
+    roleOrTargets?: string | readonly RealtimeTarget[],
+  ): RealtimeEvent[] {
     const history = this.eventLog.get(restaurantId) || [];
     const now = Date.now();
     const cutoff = now - InMemoryRealtimeBus.EVENT_TTL_MS;
 
-    return history.filter((e) => e.timestamp > since && e.timestamp >= cutoff);
+    return history.filter((e) => {
+      if (e.timestamp <= since || e.timestamp < cutoff) {
+        return false;
+      }
+      if (!roleOrTargets) {
+        return true;
+      }
+      return this.canAccessEvent(e, roleOrTargets);
+    });
+  }
+
+  private canAccessEvent(
+    event: RealtimeEvent,
+    roleOrTargets: string | readonly RealtimeTarget[],
+  ): boolean {
+    const eventTarget = event.target || 'all';
+    if (eventTarget === 'all') {
+      return true;
+    }
+
+    if (Array.isArray(roleOrTargets)) {
+      return roleOrTargets.includes(eventTarget);
+    }
+
+    const role = String(roleOrTargets).toUpperCase();
+    if (role === 'OWNER' || role === 'MANAGER') {
+      return true;
+    }
+    if (role === 'KITCHEN') {
+      return eventTarget === 'kitchen';
+    }
+    if (role === 'WAITER' || role === 'CASHIER') {
+      return eventTarget === 'floor';
+    }
+    return false;
   }
 
   subscribe(subscriber: RealtimeSubscriber): () => void {

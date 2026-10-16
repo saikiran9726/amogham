@@ -1,8 +1,5 @@
 import type { FastifyInstance, FastifyRequest } from 'fastify';
-import {
-  Permissions,
-  printEventSchema,
-} from '@restaurant-os/shared';
+import { Permissions, printEventSchema } from '@restaurant-os/shared';
 import { requirePermission } from '../../auth/middleware.js';
 import { BillingService } from '../../services/billing/BillingService.js';
 import { forTenant } from '../../db/tenant.js';

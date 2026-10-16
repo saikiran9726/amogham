@@ -1,5 +1,5 @@
 import type { FastifyInstance } from 'fastify';
-import { eq, and, isNull, gt } from 'drizzle-orm';
+import { eq, and, isNull, gt, sql } from 'drizzle-orm';
 import { AppError, generateUuidV7 } from '@restaurant-os/shared';
 import { forSystem } from '../../db/tenant.js';
 import { users } from '../../db/schema/users.js';
@@ -7,6 +7,8 @@ import { roles } from '../../db/schema/roles.js';
 import { refreshTokens } from '../../db/schema/refresh-tokens.js';
 import { generateRandomToken, hashToken } from '../../auth/crypto.js';
 import { signAccessToken } from '../../auth/jwt.js';
+import { invalidateUserSessionCache } from '../../auth/token-cache.js';
+import { disconnectUserSockets } from '../../realtime/socket.js';
 import { registerRouteGuard } from '../../auth/middleware.js';
 import { recordAuditLog } from '../../services/audit.js';
 import { env } from '../../config/env.js';
@@ -234,7 +236,7 @@ export async function registerAuthRefreshRoutes(app: FastifyInstance): Promise<v
             }
           }
 
-          // Outside grace window: token reuse detected! Revoke entire family
+          // Outside grace window: token reuse detected! Revoke entire family and bump token version
           await tx
             .update(refreshTokens)
             .set({ revokedAt: new Date() })
@@ -242,11 +244,14 @@ export async function registerAuthRefreshRoutes(app: FastifyInstance): Promise<v
               and(eq(refreshTokens.familyId, existing.familyId), isNull(refreshTokens.revokedAt)),
             );
 
-          const [user] = await tx
-            .select({ restaurantId: users.restaurantId })
-            .from(users)
+          const [updatedUser] = await tx
+            .update(users)
+            .set({
+              tokenVersion: sql`${users.tokenVersion} + 1`,
+              updatedAt: new Date(),
+            })
             .where(eq(users.id, existing.userId))
-            .limit(1);
+            .returning({ restaurantId: users.restaurantId });
 
           return {
             type: 'reuse_detected' as const,
@@ -254,7 +259,7 @@ export async function registerAuthRefreshRoutes(app: FastifyInstance): Promise<v
             userId: existing.userId,
             tokenId: existing.id,
             revokedAt: existing.revokedAt,
-            restaurantId: user?.restaurantId ?? '00000000-0000-0000-0000-000000000000',
+            restaurantId: updatedUser?.restaurantId ?? '00000000-0000-0000-0000-000000000000',
           };
         }
 
@@ -285,6 +290,10 @@ export async function registerAuthRefreshRoutes(app: FastifyInstance): Promise<v
       }
 
       if (result.type === 'reuse_detected') {
+        // Invalidate cache after transaction commit
+        invalidateUserSessionCache(result.restaurantId, result.userId);
+        disconnectUserSockets(result.userId, 'Refresh token reuse detected: session terminated');
+
         await recordAuditLog({
           restaurantId: result.restaurantId,
           userId: result.userId,

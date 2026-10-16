@@ -39,7 +39,8 @@ export class UsbDriver implements PrinterDriver {
         bytesWritten,
       };
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'USB printer disconnected or permission denied';
+      const msg =
+        err instanceof Error ? err.message : 'USB printer disconnected or permission denied';
       return {
         success: false,
         error: `USB print failed: ${msg}`,

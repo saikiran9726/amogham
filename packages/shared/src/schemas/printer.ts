@@ -30,7 +30,8 @@ export type PrinterConfig = z.infer<typeof printerConfigSchema>;
  * Rejects loopback addresses (127.0.0.1, localhost) and cloud metadata addresses (169.254.169.254).
  */
 export function isValidLanPrinterAddress(addr: string): { valid: boolean; reason?: string } {
-  if (!addr || typeof addr !== 'string') return { valid: false, reason: 'Address is required for LAN printers' };
+  if (!addr || typeof addr !== 'string')
+    return { valid: false, reason: 'Address is required for LAN printers' };
   const trimmed = addr.trim();
   const parts = trimmed.split(':');
   const host = parts[0]?.trim() || '';
@@ -48,7 +49,10 @@ export function isValidLanPrinterAddress(addr: string): { valid: boolean; reason
     lowerHost === '169.254.169.254' ||
     lowerHost === 'metadata.google.internal'
   ) {
-    return { valid: false, reason: 'Loopback and link-local metadata addresses are forbidden for printers' };
+    return {
+      valid: false,
+      reason: 'Loopback and link-local metadata addresses are forbidden for printers',
+    };
   }
 
   // Validate port if specified

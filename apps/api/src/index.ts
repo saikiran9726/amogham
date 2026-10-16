@@ -4,25 +4,14 @@ import { closeDatabaseConnection } from './db/client.js';
 import { closeRealtimeServer } from './realtime/socket.js';
 
 import { db } from './db/client.js';
-import { restaurants } from './db/schema/restaurants.js';
+import { verifyTenancyStartupGuards } from './db/tenant.js';
 import { HubSyncWorker } from './services/hub/HubSyncWorker.js';
 
 async function start(): Promise<void> {
   const app = await buildServer();
 
-  // Enforce single tenant per deployment when MULTI_TENANT=false in production
-  if (!env.MULTI_TENANT && env.NODE_ENV === 'production') {
-    const existingRestaurants = await db.select({ id: restaurants.id }).from(restaurants);
-    if (existingRestaurants.length !== 1) {
-      app.log.error(
-        { count: existingRestaurants.length },
-        'MULTI_TENANT=false requires exactly one restaurant in production database. Deployment halted.',
-      );
-      throw new Error(
-        `MULTI_TENANT=false requires exactly one restaurant row in production, found ${existingRestaurants.length}`,
-      );
-    }
-  }
+  // Enforce tenancy startup guards (RLS check for MULTI_TENANT=true, single restaurant for MULTI_TENANT=false)
+  await verifyTenancyStartupGuards(db, app.log, env);
 
   // Start HubSyncWorker if deployed in local_hub role
   let hubWorker: HubSyncWorker | null = null;
@@ -62,7 +51,7 @@ async function start(): Promise<void> {
 
     try {
       if (hubWorker) {
-        hubWorker.stop();
+        await hubWorker.stop();
         app.log.info('HubSyncWorker stopped.');
       }
       await closeRealtimeServer();

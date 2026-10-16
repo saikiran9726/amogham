@@ -168,15 +168,26 @@ export class SyncEngineService {
         const seq = outcome.event.seq;
         latestSeq = Math.max(latestSeq, seq);
 
-        // Broadcast event to realtime rooms
+        // Broadcast minimal sequence metadata and entity ID rather than sensitive raw financial payloads
+        const entityId =
+          (outcome.resultPayload?.orderId as string | undefined) ||
+          (outcome.resultPayload?.kotId as string | undefined) ||
+          (outcome.resultPayload?.billId as string | undefined) ||
+          (outcome.resultPayload?.id as string | undefined) ||
+          ((cmd.payload as Record<string, unknown>)?.orderId as string | undefined) ||
+          ((cmd.payload as Record<string, unknown>)?.kotId as string | undefined) ||
+          ((cmd.payload as Record<string, unknown>)?.billId as string | undefined) ||
+          ((cmd.payload as Record<string, unknown>)?.id as string | undefined);
+
         emitRealtimeEvent(
           restaurantId,
           'sync:event',
           {
             seq,
             type: cmd.type,
-            payload: outcome.resultPayload || (cmd.payload as Record<string, unknown>),
+            id: entityId,
             deviceId,
+            serverTimestamp: outcome.event.serverTimestamp.toISOString(),
           },
           'all',
         );
@@ -571,7 +582,8 @@ export class SyncEngineService {
     restaurantId: string,
     input: RegisterHubInput,
   ): Promise<HubRegistryItem> {
-    const apiKeyHash = crypto.createHash('sha256').update(input.apiKey).digest('hex');
+    const rawApiKey = input.apiKey || `hub_${crypto.randomBytes(32).toString('hex')}`;
+    const apiKeyHash = crypto.createHash('sha256').update(rawApiKey).digest('hex');
 
     const [hub] = await db
       .insert(hubRegistry)
@@ -609,6 +621,7 @@ export class SyncEngineService {
       lastSyncedSeq: hub!.lastSyncedSeq,
       createdAt: hub!.createdAt.toISOString(),
       updatedAt: hub!.updatedAt.toISOString(),
+      apiKey: rawApiKey,
     };
   }
 

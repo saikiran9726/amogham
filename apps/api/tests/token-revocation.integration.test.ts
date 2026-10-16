@@ -437,7 +437,7 @@ describe('Auth Hardening: Token Version Revocation, Refresh Rotation & Environme
         headers: { authorization: `Bearer ${ownerToken}` },
         payload: {
           credentialType: 'pin',
-          pin: '8888',
+          pin: '8392',
         },
       });
       expect(resetRes.statusCode).toBe(200);

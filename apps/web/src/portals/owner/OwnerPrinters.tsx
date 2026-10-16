@@ -19,6 +19,7 @@ import {
   Settings,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { useAuthStore } from '../../stores/useAuthStore.js';
 
 export const OwnerPrinters: React.FC = () => {
   const navigate = useNavigate();
@@ -36,7 +37,7 @@ export const OwnerPrinters: React.FC = () => {
   const fetchPrinters = async () => {
     setIsLoading(true);
     try {
-      const token = localStorage.getItem('access_token') || '';
+      const token = useAuthStore.getState().accessToken || '';
       const res = await fetch('/api/printers', {
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -56,7 +57,7 @@ export const OwnerPrinters: React.FC = () => {
   }, []);
 
   const handleCreateOrUpdate = async (input: CreatePrinterInput) => {
-    const token = localStorage.getItem('access_token') || '';
+    const token = useAuthStore.getState().accessToken || '';
     const url = editingPrinter ? `/api/printers/${editingPrinter.id}` : '/api/printers';
     const method = editingPrinter ? 'PATCH' : 'POST';
 
@@ -79,7 +80,7 @@ export const OwnerPrinters: React.FC = () => {
 
   const handleDelete = async (id: string) => {
     if (!confirm('Are you sure you want to remove this printer?')) return;
-    const token = localStorage.getItem('access_token') || '';
+    const token = useAuthStore.getState().accessToken || '';
     const res = await fetch(`/api/printers/${id}`, {
       method: 'DELETE',
       headers: { Authorization: `Bearer ${token}` },

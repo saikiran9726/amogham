@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { apiFetch } from '../../stores/useAuthStore.js';
 import { useToastStore } from '../../stores/useToastStore.js';
+import { useSocketFallbackPollInterval } from '../../utils/polling.js';
 import { Button } from '../../components/ui/Button.js';
 import { StockChip } from '../../components/StockChip.js';
 import { CountSheet } from '../../components/CountSheet.js';
@@ -94,6 +95,7 @@ export const OwnerInventory: React.FC = () => {
   const [csvPreviewRows, setCsvPreviewRows] = useState<CsvPreviewRow[]>([]);
 
   // Queries
+  const fallbackPollInterval = useSocketFallbackPollInterval();
   const { data: itemsData, isLoading: isItemsLoading } = useQuery<{ items: InventoryItemOutput[] }>(
     {
       queryKey: ['inventory-items', lowStockFilter, search],
@@ -101,7 +103,7 @@ export const OwnerInventory: React.FC = () => {
         apiFetch(
           `/inventory/items?lowStockOnly=${lowStockFilter}&search=${encodeURIComponent(search)}`,
         ),
-      refetchInterval: 15000,
+      refetchInterval: fallbackPollInterval,
     },
   );
 

@@ -25,6 +25,7 @@ async function ensureMigrationsTable(client: import('pg').PoolClient): Promise<v
 }
 
 export async function runMigrations(direction: 'up' | 'down' = 'up'): Promise<void> {
+  invalidateMigrationCache();
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
@@ -89,22 +90,55 @@ export async function runMigrations(direction: 'up' | 'down' = 'up'): Promise<vo
   }
 }
 
-export async function checkMigrationsStatus(): Promise<{
+let cachedExpectedVersion: string | null = null;
+
+export function invalidateMigrationCache(): void {
+  cachedExpectedVersion = null;
+}
+
+export async function getExpectedMigrationVersion(): Promise<string | null> {
+  if (cachedExpectedVersion !== null) {
+    return cachedExpectedVersion;
+  }
+  try {
+    const allFiles = await fs.promises.readdir(MIGRATIONS_DIR);
+    const upFiles = allFiles
+      .filter((file) => file.endsWith('.up.sql'))
+      .sort((a, b) => a.localeCompare(b));
+
+    cachedExpectedVersion =
+      upFiles.length > 0 ? upFiles[upFiles.length - 1]!.replace('.up.sql', '') : null;
+    return cachedExpectedVersion;
+  } catch {
+    return null;
+  }
+}
+
+export async function checkMigrationsStatus(existingClient?: import('pg').PoolClient): Promise<{
   isUpToDate: boolean;
   expectedVersion: string | null;
   currentVersion: string | null;
 }> {
-  const allFiles = fs.readdirSync(MIGRATIONS_DIR);
-  const upFiles = allFiles
-    .filter((file) => file.endsWith('.up.sql'))
-    .sort((a, b) => a.localeCompare(b));
+  const expectedVersion = await getExpectedMigrationVersion();
 
-  const expectedVersion =
-    upFiles.length > 0 ? upFiles[upFiles.length - 1]!.replace('.up.sql', '') : null;
-
-  const client = await pool.connect();
+  const client = existingClient ?? (await pool.connect());
   try {
-    await ensureMigrationsTable(client);
+    // Read-only check: verify whether _migrations table exists without triggering DDL
+    const { rows: tableExistsRows } = await client.query<{ exists: boolean }>(`
+      SELECT EXISTS (
+        SELECT 1 FROM information_schema.tables 
+        WHERE table_schema = 'public' AND table_name = '_migrations'
+      ) AS exists;
+    `);
+
+    if (!tableExistsRows[0]?.exists) {
+      return {
+        isUpToDate: false,
+        expectedVersion,
+        currentVersion: null,
+      };
+    }
+
     const { rows } = await client.query<{ name: string }>(
       'SELECT name FROM _migrations ORDER BY id DESC LIMIT 1;',
     );
@@ -115,7 +149,9 @@ export async function checkMigrationsStatus(): Promise<{
       currentVersion,
     };
   } finally {
-    client.release();
+    if (!existingClient) {
+      client.release();
+    }
   }
 }
 

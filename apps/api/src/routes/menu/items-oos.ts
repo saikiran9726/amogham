@@ -1,9 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import { eq, and } from 'drizzle-orm';
-import {
-  Permissions,
-  AppError,
-} from '@restaurant-os/shared';
+import { Permissions, AppError } from '@restaurant-os/shared';
 import { forTenant } from '../../db/tenant.js';
 import { menuItems } from '../../db/schema/menu-items.js';
 import { requirePermission, registerRouteGuard } from '../../auth/middleware.js';

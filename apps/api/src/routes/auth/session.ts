@@ -9,6 +9,7 @@ import { authenticate, registerRouteGuard } from '../../auth/middleware.js';
 import { recordAuditLog } from '../../services/audit.js';
 import { isOriginAllowed } from '../../config/cors.js';
 import { invalidateUserSessionCache } from '../../auth/token-cache.js';
+import { disconnectUserSockets } from '../../realtime/socket.js';
 import { getUserPermissions } from './permissions.js';
 import { COOKIE_NAME } from './login.js';
 
@@ -63,6 +64,7 @@ export async function registerAuthSessionRoutes(app: FastifyInstance): Promise<v
             request,
           });
         }
+        disconnectUserSockets(tokenRow.userId, 'User logged out');
       }
     }
 
@@ -93,10 +95,7 @@ export async function registerAuthSessionRoutes(app: FastifyInstance): Promise<v
         .set({ revokedAt: new Date() })
         .where(and(eq(refreshTokens.userId, authUser.userId), isNull(refreshTokens.revokedAt)));
 
-      // 3. Invalidate memory cache
-      invalidateUserSessionCache(authUser.restaurantId, authUser.userId);
-
-      // 4. Audit log
+      // 3. Audit log
       await recordAuditLog({
         restaurantId: authUser.restaurantId,
         userId: authUser.userId,
@@ -106,6 +105,10 @@ export async function registerAuthSessionRoutes(app: FastifyInstance): Promise<v
         request,
       });
     });
+
+    // Invalidate memory cache cleanly after transaction commit
+    invalidateUserSessionCache(authUser.restaurantId, authUser.userId);
+    disconnectUserSockets(authUser.userId, 'User logged out from all sessions');
 
     reply.clearCookie(COOKIE_NAME, { path: '/auth' });
     return reply.status(200).send({ success: true });

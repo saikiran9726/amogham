@@ -100,7 +100,11 @@ export const OwnerModifiers: React.FC = () => {
     setOptions((prev) => prev.filter((_, i) => i !== idx));
   };
 
-  const updateOption = (idx: number, field: keyof ModifierOption, val: ModifierOption[keyof ModifierOption]) => {
+  const updateOption = (
+    idx: number,
+    field: keyof ModifierOption,
+    val: ModifierOption[keyof ModifierOption],
+  ) => {
     setOptions((prev) => prev.map((opt, i) => (i === idx ? { ...opt, [field]: val } : opt)));
   };
 

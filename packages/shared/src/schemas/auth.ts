@@ -58,6 +58,74 @@ export const authResponseSchema = z.object({
   accessToken: z.string(),
 });
 
+export function isDenylistedPin(pin: string): boolean {
+  if (!/^\d{4,6}$/.test(pin)) {
+    return false;
+  }
+
+  // All identical digits: e.g. 0000, 1111, 8888, 999999
+  if (pin.split('').every((c) => c === pin[0])) {
+    return true;
+  }
+
+  // Sequential ascending: e.g. 1234, 2345, 0123, 12345, 123456
+  const isAscending = pin
+    .split('')
+    .every((c, i, arr) => i === 0 || Number(c) === Number(arr[i - 1]) + 1);
+  if (isAscending) {
+    return true;
+  }
+
+  // Sequential descending: e.g. 4321, 5432, 9876, 654321
+  const isDescending = pin
+    .split('')
+    .every((c, i, arr) => i === 0 || Number(c) === Number(arr[i - 1]) - 1);
+  if (isDescending) {
+    return true;
+  }
+
+  // Repeated 2-digit patterns: e.g. 1212, 3434, 121212
+  if (pin.length % 2 === 0) {
+    const pair = pin.slice(0, 2);
+    if (pair.repeat(pin.length / 2) === pin) {
+      return true;
+    }
+  }
+
+  const commonWeakPins = new Set([
+    '1234',
+    '4321',
+    '0000',
+    '1111',
+    '2222',
+    '3333',
+    '4444',
+    '5555',
+    '6666',
+    '7777',
+    '8888',
+    '9999',
+    '1212',
+    '12345',
+    '54321',
+    '123456',
+    '654321',
+    '000000',
+    '111111',
+    '123123',
+    '112233',
+  ]);
+
+  return commonWeakPins.has(pin);
+}
+
+export const pinSchema = z
+  .string()
+  .regex(/^\d{4,6}$/, 'PIN must be 4 to 6 digits')
+  .refine((pin) => !isDenylistedPin(pin), {
+    message: 'PIN is too weak (sequential or repeated digits are not allowed)',
+  });
+
 export const staffCreateSchema = z
   .object({
     name: z.string().trim().min(1, 'Staff name is required').max(100),
@@ -70,20 +138,18 @@ export const staffCreateSchema = z
     role: roleNameSchema,
     credentialType: z.enum(['password', 'pin']),
     password: z.string().min(10, 'Password must be at least 10 characters').optional(),
-    pin: z
-      .string()
-      .regex(/^\d{4,6}$/, 'PIN must be 4 to 6 digits')
-      .optional(),
+    pin: pinSchema.optional(),
   })
   .refine(
     (data) => {
       if (data.credentialType === 'password') {
         return !!data.password && data.password.length >= 10;
       }
-      return !!data.pin && /^\d{4,6}$/.test(data.pin);
+      return !!data.pin && !isDenylistedPin(data.pin);
     },
     {
-      message: 'Password (min 10 chars) or PIN (4-6 digits) must be provided',
+      message:
+        'Password (min 10 chars) or valid PIN (4-6 digits, not sequential/repeated) must be provided',
       path: ['password'],
     },
   );
@@ -98,20 +164,17 @@ export const staffResetCredentialSchema = z
   .object({
     credentialType: z.enum(['password', 'pin']),
     password: z.string().min(10, 'Password must be at least 10 characters').optional(),
-    pin: z
-      .string()
-      .regex(/^\d{4,6}$/, 'PIN must be 4 to 6 digits')
-      .optional(),
+    pin: pinSchema.optional(),
   })
   .refine(
     (data) => {
       if (data.credentialType === 'password') {
         return !data.password || data.password.length >= 10;
       }
-      return !data.pin || /^\d{4,6}$/.test(data.pin);
+      return !data.pin || (!isDenylistedPin(data.pin) && /^\d{4,6}$/.test(data.pin));
     },
     {
-      message: 'Password must be at least 10 characters or PIN must be 4-6 digits',
+      message: 'Password must be at least 10 characters or valid PIN must be 4-6 digits',
       path: ['password'],
     },
   );

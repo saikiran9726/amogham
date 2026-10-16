@@ -1,6 +1,6 @@
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { SyncEngineService } from '../services/sync-engine.js';
-import { authenticate, requirePermission, registerRouteGuard } from '../auth/middleware.js';
+import { requirePermission, registerRouteGuard } from '../auth/middleware.js';
 import { recordAuditLog } from '../services/audit.js';
 import {
   Permissions,
@@ -20,13 +20,13 @@ export async function syncRoutes(app: FastifyInstance): Promise<void> {
     method: 'POST',
     url: '/sync/push',
     isPublic: false,
-    permission: 'authenticated',
+    permission: Permissions.SYNC_USE,
   });
   registerRouteGuard({
     method: 'GET',
     url: '/sync/pull',
     isPublic: false,
-    permission: 'authenticated',
+    permission: Permissions.SYNC_USE,
   });
   registerRouteGuard({
     method: 'GET',
@@ -78,7 +78,7 @@ export async function syncRoutes(app: FastifyInstance): Promise<void> {
    */
   app.post(
     '/sync/push',
-    { preHandler: [authenticate] },
+    { preHandler: [requirePermission(Permissions.SYNC_USE)] },
     async (request: FastifyRequest) => {
       const authUser = request.user!;
       const rawBody = (request.body || {}) as Record<string, unknown>;
@@ -110,7 +110,7 @@ export async function syncRoutes(app: FastifyInstance): Promise<void> {
    */
   app.get(
     '/sync/pull',
-    { preHandler: [authenticate] },
+    { preHandler: [requirePermission(Permissions.SYNC_USE)] },
     async (request: FastifyRequest) => {
       const restaurantId = request.user!.restaurantId;
       const { since, limit } = syncPullQuerySchema.parse(request.query);

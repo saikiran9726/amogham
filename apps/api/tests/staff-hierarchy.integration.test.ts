@@ -300,13 +300,13 @@ describe('Staff Role Hierarchy & Last-Owner Integration Tests', () => {
         headers: { authorization: `Bearer ${managerToken}` },
         payload: {
           credentialType: 'pin',
-          pin: '9876',
+          pin: '9825',
         },
       });
 
       expect(res.statusCode).toBe(200);
       expect(res.json().success).toBe(true);
-      expect(res.json().credentialValue).toBe('9876');
+      expect(res.json().credentialValue).toBe('9825');
 
       // Verify audit log recorded before and after
       const [audit] = await db

@@ -6,9 +6,11 @@ const config: CapacitorConfig = {
   webDir: 'dist',
   server: {
     androidScheme: 'https',
-    cleartext: true, // Allow LAN printing over local HTTP / raw IP
+    cleartext: false, // Insecure cleartext over arbitrary WAN is disallowed; LAN / local cleartext is governed by network_security_config.xml
   },
-  android: {},
+  android: {
+    allowMixedContent: false,
+  },
 };
 
 export default config;

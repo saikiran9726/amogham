@@ -18,6 +18,8 @@ export const users = pgTable('users', {
   active: boolean('active').default(true).notNull(),
   failedAttempts: integer('failed_attempts').default(0).notNull(),
   lockedUntil: timestamp('locked_until', { withTimezone: true }),
+  pinFailedAttempts: integer('pin_failed_attempts').default(0).notNull(),
+  pinLockedUntil: timestamp('pin_locked_until', { withTimezone: true }),
   tokenVersion: integer('token_version').default(0).notNull(),
   lastLoginAt: timestamp('last_login_at', { withTimezone: true }),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),

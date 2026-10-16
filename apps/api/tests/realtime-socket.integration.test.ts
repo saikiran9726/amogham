@@ -52,9 +52,40 @@ describe('Realtime Socket.IO Security & Cross-Tenant Hardening', () => {
     await app.listen({ port: 0, host: '127.0.0.1' });
     const addr = app.server.address() as { port: number };
     serverAddress = `http://127.0.0.1:${addr.port}`;
+
+    const { pool } = await import('../src/db/client.js');
+    await pool.query(
+      `INSERT INTO restaurants (id, name) VALUES ($1, 'Tenant A'), ($2, 'Tenant B') ON CONFLICT (id) DO NOTHING`,
+      [tenantA, tenantB],
+    );
+    await pool.query(
+      `INSERT INTO users (id, restaurant_id, name, username, active, token_version)
+       VALUES 
+         ($1, $2, 'Waiter A', 'waiter_a_sock', true, 0),
+         ($3, $2, 'Owner A', 'owner_a_sock', true, 0),
+         ($4, $5, 'Waiter B', 'waiter_b_sock', true, 0)
+       ON CONFLICT (id) DO UPDATE SET active = true, token_version = 0`,
+      [userAWaiter, tenantA, userAOwner, userBWaiter, tenantB],
+    );
+
+    const { setUserSessionCache } = await import('../src/auth/token-cache.js');
+    setUserSessionCache(tenantA, userAWaiter, { tokenVersion: 0, active: true });
+    setUserSessionCache(tenantA, userAOwner, { tokenVersion: 0, active: true });
+    setUserSessionCache(tenantB, userBWaiter, { tokenVersion: 0, active: true });
   });
 
   afterAll(async () => {
+    try {
+      const { pool } = await import('../src/db/client.js');
+      await pool.query(`DELETE FROM users WHERE id IN ($1, $2, $3)`, [
+        userAWaiter,
+        userAOwner,
+        userBWaiter,
+      ]);
+      await pool.query(`DELETE FROM restaurants WHERE id IN ($1, $2)`, [tenantA, tenantB]);
+    } catch {
+      // Ignore cleanup error
+    }
     await app.close();
   });
 
@@ -185,8 +216,8 @@ describe('Realtime Socket.IO Security & Cross-Tenant Hardening', () => {
   });
 
   it('session expiry: socket is automatically disconnected at token exp', async () => {
-    // Generate a token that expires in 1 second
-    const shortLivedToken = jwt.sign(
+    // Generate a token that expires in 2 seconds
+    const shortLivedToken = signAccessToken(
       {
         userId: userAWaiter,
         restaurantId: tenantA,
@@ -195,8 +226,7 @@ describe('Realtime Socket.IO Security & Cross-Tenant Hardening', () => {
         role: Roles.WAITER,
         permissions: ROLE_DEFAULT_PERMISSIONS[Roles.WAITER],
       },
-      env.JWT_SECRET,
-      { expiresIn: '2s', algorithm: 'HS256' },
+      { expiresIn: '2s' },
     );
 
     const socket = ClientIO(serverAddress, {

@@ -2,6 +2,7 @@ import type { FastifyRequest, FastifyReply } from 'fastify';
 import { AppError } from '@restaurant-os/shared';
 import { type AccessTokenPayload } from './jwt.js';
 import { verifyUserIdentity } from './identity.js';
+import { isDatabaseOutageError } from '../plugins/error-handler.js';
 
 // Extend FastifyRequest type to hold authenticated user
 declare module 'fastify' {
@@ -62,6 +63,13 @@ export async function authenticate(request: FastifyRequest, _reply: FastifyReply
   } catch (err: unknown) {
     if (err instanceof AppError) {
       throw err;
+    }
+    // Prevent transient DB outages from failing as generic 401 Unauthorized
+    if (isDatabaseOutageError(err)) {
+      request.log.error({ err }, 'Database outage during authentication');
+      throw AppError.serviceUnavailable(
+        'Database service temporarily unavailable. Please retry shortly.',
+      );
     }
     request.log.warn({ err }, 'Token verification failed');
     throw AppError.unauthorized('Invalid or expired access token');

@@ -38,8 +38,8 @@ describe('Health, Liveness, Readiness & Version Route Tests', () => {
     expect(body.db).toBe('connected');
     expect(body.migration).toBeDefined();
     expect(body.migration.isUpToDate).toBe(true);
-    expect(body.migration.expectedVersion).toBe('0019_menu_sample_and_perf_indexes');
-    expect(body.migration.currentVersion).toBe('0019_menu_sample_and_perf_indexes');
+    expect(body.migration.expectedVersion).toBe('0021_login_throttle');
+    expect(body.migration.currentVersion).toBe('0021_login_throttle');
   });
 
   it('GET /version: trimmed strictly to name and version without extra environment or uptime fields', async () => {

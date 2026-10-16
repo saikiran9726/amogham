@@ -32,10 +32,10 @@ To avoid split-brain conflicts and distributed deadlocks, domains enforce strict
 ### Machine Authentication Boundary (`X-Hub-Key`)
 
 Edge replication relies on dedicated machine endpoints (`/sync/hub/push` and `/sync/hub/pull`) with strict credential separation:
+
 - **No User JWTs**: The machine endpoints reject all bearer tokens or user cookies (HTTP 403 Forbidden). Handheld waiter/kitchen logins cannot be replayed against machine sync pipes.
 - **Constant-Time Verification**: The `X-Hub-Key` header is verified against the registered SHA-256 hash using `crypto.timingSafeEqual` to eliminate timing side-channel attacks.
 - **Tenant Affinity**: Each machine key is bound to exactly one `restaurant_id` in `hub_registry`. Cross-restaurant event injection is structurally impossible.
-
 
 ---
 

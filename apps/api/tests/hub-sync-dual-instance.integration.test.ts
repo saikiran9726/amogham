@@ -59,7 +59,6 @@ describe('Hub Mode & Dual-Instance Edge-to-Cloud Sync Integration', () => {
       await pool.query('DELETE FROM sync_events WHERE restaurant_id = $1', [restaurantId]);
       await pool.query('DELETE FROM sync_cursors WHERE restaurant_id = $1', [restaurantId]);
       await pool.query('DELETE FROM dead_letter_commands WHERE restaurant_id = $1', [restaurantId]);
-      await pool.query('DELETE FROM restaurants WHERE id = $1', [restaurantId]);
     } catch {
       // Ignore cleanup error
     }
@@ -142,6 +141,8 @@ describe('Hub Mode & Dual-Instance Edge-to-Cloud Sync Integration', () => {
         url: '/sync/hub/push',
         headers: {
           'x-hub-key': 'completely_invalid_hub_key_000000000000',
+          'x-restaurant-id': restaurantId,
+          'x-hub-device-id': hubDeviceId,
         },
         payload: {
           deviceId: hubDeviceId,
@@ -211,6 +212,7 @@ describe('Hub Mode & Dual-Instance Edge-to-Cloud Sync Integration', () => {
         headers: {
           'x-hub-key': rawHubApiKey,
           'x-restaurant-id': restaurantId,
+          'x-hub-device-id': hubDeviceId,
         },
       });
 
@@ -258,15 +260,45 @@ describe('Hub Mode & Dual-Instance Edge-to-Cloud Sync Integration', () => {
       expect(metricsText).toContain('restaurant_os_sync_lag_events');
       expect(metricsText).toContain('restaurant_os_hub_sync_push_total');
 
-      worker.stop();
+      await worker.stop();
     });
 
-    it('dead-letters persistent failing commands after reaching max retries', async () => {
-      // Worker pointing to bad cloud URL that returns 500
-      const badWorker = new HubSyncWorker({
+    it('never dead-letters transient network failures and preserves events for retry', async () => {
+      // Worker pointing to unreachable network endpoint (connection refused)
+      const networkFailingWorker = new HubSyncWorker({
         restaurantId,
         cloudSyncUrl: 'http://127.0.0.1:1', // Connection refused
         hubApiKey: rawHubApiKey,
+        deviceId: hubDeviceId,
+        syncIntervalMs: 1000,
+        maxRetries: 1,
+      });
+
+      const transientCmdId = generateUuidV7();
+      await pool.query(
+        `INSERT INTO sync_events (restaurant_id, device_id, command_id, idempotency_key, type, payload)
+         VALUES ($1, $2, $3, $4, 'order.create', '{"transient":true}'::jsonb)`,
+        [restaurantId, hubDeviceId, transientCmdId, `transient-${Date.now()}`],
+      );
+
+      await expect(networkFailingWorker.executeCycle()).rejects.toThrow();
+
+      // Verify dead_letter_commands was NOT recorded for transient error
+      const { rows: dlRows } = await pool.query(
+        'SELECT * FROM dead_letter_commands WHERE restaurant_id = $1 AND command_id = $2',
+        [restaurantId, transientCmdId],
+      );
+      expect(dlRows.length).toBe(0);
+
+      await networkFailingWorker.stop();
+    });
+
+    it('dead-letters persistent non-retryable errors after reaching max retries', async () => {
+      // Worker with invalid hubApiKey that triggers 401/403 (non-retryable client error)
+      const badWorker = new HubSyncWorker({
+        restaurantId,
+        cloudSyncUrl: cloudBaseUrl,
+        hubApiKey: 'invalid_unauthorized_key',
         deviceId: hubDeviceId,
         syncIntervalMs: 1000,
         maxRetries: 1, // trigger dead-letter immediately on 1st error
@@ -282,7 +314,7 @@ describe('Hub Mode & Dual-Instance Edge-to-Cloud Sync Integration', () => {
 
       await expect(badWorker.executeCycle()).rejects.toThrow();
 
-      // Verify dead_letter_commands recorded
+      // Verify dead_letter_commands recorded for non-retryable error
       const { rows: dlRows } = await pool.query(
         'SELECT * FROM dead_letter_commands WHERE restaurant_id = $1 AND command_id = $2',
         [restaurantId, poisonCmdId],
@@ -290,7 +322,7 @@ describe('Hub Mode & Dual-Instance Edge-to-Cloud Sync Integration', () => {
       expect(dlRows.length).toBe(1);
       expect(dlRows[0].status).toBe('dead_letter');
 
-      badWorker.stop();
+      await badWorker.stop();
     });
   });
 

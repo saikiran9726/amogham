@@ -22,7 +22,7 @@ import {
 } from '@restaurant-os/shared';
 import { recordAuditLog } from './audit.js';
 import { emitRealtimeEvent } from '../realtime/socket.js';
-import { verifyApproverPin } from '../auth/approval.js';
+import { authorizeApprover, recordApprovalUse } from '../auth/approval.js';
 
 /**
  * Fetches the current End-of-Day pre-check checklist and financial totals.
@@ -387,7 +387,12 @@ export async function closeBusinessDay(
     request,
   });
 
-  emitRealtimeEvent('owner', 'day.closed', { businessDate, summaryId: savedSummary!.id });
+  emitRealtimeEvent(
+    restaurantId,
+    'day.closed',
+    { businessDate, summaryId: savedSummary!.id },
+    'owner',
+  );
 
   return {
     ...savedSummary!,
@@ -430,7 +435,7 @@ export async function reopenBusinessDay(
     throw AppError.notFound(`No closing summary found for business date ${businessDate}`);
   }
 
-  await verifyApproverPin(db, {
+  const approver = await authorizeApprover(db, {
     restaurantId,
     approverUserId,
     pin: effectivePin,
@@ -439,6 +444,16 @@ export async function reopenBusinessDay(
     entity: 'daily_summary',
     entityId: existing.id,
     actorUserId: userId,
+    request,
+  });
+
+  await recordApprovalUse(db, {
+    restaurantId,
+    approver,
+    entity: 'daily_summary',
+    entityId: existing.id,
+    actorUserId: userId,
+    reason,
     request,
   });
 
@@ -466,7 +481,12 @@ export async function reopenBusinessDay(
     request,
   });
 
-  emitRealtimeEvent('owner', 'day.reopened', { businessDate, summaryId: reopened!.id });
+  emitRealtimeEvent(
+    restaurantId,
+    'day.reopened',
+    { businessDate, summaryId: reopened!.id },
+    'owner',
+  );
 
   return {
     ...reopened!,

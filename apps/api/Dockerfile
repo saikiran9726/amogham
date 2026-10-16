@@ -1,10 +1,12 @@
 # Multi-stage Dockerfile for @restaurant-os/api
-FROM node:20-alpine AS base
+FROM node:22-alpine AS base
 RUN corepack enable && corepack prepare pnpm@12.4.2 --activate
 WORKDIR /app
 
 # Stage 1: Build dependencies and compile code
 FROM base AS builder
+ARG GIT_SHA
+ENV GIT_SHA=$GIT_SHA
 COPY package.json pnpm-workspace.yaml pnpm-lock.yaml* tsconfig.base.json tsconfig.json ./
 COPY packages/shared ./packages/shared
 COPY apps/api ./apps/api
@@ -22,8 +24,11 @@ RUN cp -r /app/apps/api/dist /app/deployed/dist && \
     cp -r /app/apps/api/src/db/migrations/* /app/deployed/dist/db/migrations/
 
 # Stage 3: Production runner
-FROM node:20-alpine AS runner
+FROM node:22-alpine AS runner
+ARG GIT_SHA
+ENV GIT_SHA=$GIT_SHA
 ENV NODE_ENV=production
+ENV UV_THREADPOOL_SIZE=8
 WORKDIR /app
 
 # Create and switch to non-root user
