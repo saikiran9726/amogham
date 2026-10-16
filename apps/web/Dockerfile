@@ -1,5 +1,5 @@
 # Multi-stage Dockerfile for @restaurant-os/web
-FROM node:22-alpine AS base
+FROM node:25-alpine AS base
 RUN corepack enable && corepack prepare pnpm@12.4.2 --activate
 WORKDIR /app
 
